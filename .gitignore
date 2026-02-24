@@ -19,3 +19,12 @@ dist/
 # ADK
 .adk/
 crypto_data/
+
+# Vector Databases and Models
+chroma_db/
+*.parquet
+*.sqlite3
+*.bin
+*.pkl
+data/*.pkl
+vector_store.pkl
