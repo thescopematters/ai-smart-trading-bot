@@ -2,7 +2,7 @@
 
 A production-grade, voice-first AI cryptocurrency assistant. This project combines real-time market data, blockchain analytics, and a professional-grade **Paper Trading Engine** into a stunning, futuristic interface.
 
-![Crypto Chatbot Interface](assets/chatbot-demo.png)
+![Crypto Chatbot Interface](assets/image.png)
 
 ## ✨ Key Features
 
