@@ -1,42 +1,60 @@
-# AI Crypto Chatbot 🚀
+# 🚀 AI Crypto Chatbot: Voice-Enabled Paper Trading Assistant
 
-A futuristic, voice-enabled AI cryptocurrency assistant that provides real-time market data, news, and network statistics. Built with a **FastAPI** backend and a **React/Vite** frontend, powered by **Google Gemini** and **Whisper**.
+A production-grade, voice-first AI cryptocurrency assistant. This project combines real-time market data, blockchain analytics, and a professional-grade **Paper Trading Engine** into a stunning, futuristic interface.
 
 ![Crypto Chatbot Interface](assets/chatbot-demo.png)
 
-## ✨ Features
+## ✨ Key Features
 
-*   **Voice-First Interface**: Real-time Speech-to-Text (Whisper) and Text-to-Speech (offline/fast) for a seamless conversation.
-*   **Live Crypto Data**: Fetches real-time prices, market cap, and volume via CoinMarketCap.
-*   **Network Stats**: Queries on-chain data (blocks, fees, difficulty) for Bitcoin, Ethereum, and more via Blockchair.
-*   **Trending News**: Delivers the latest crypto news summaries via CryptoPanic.
-*   **Smart Agent**: Powered by Google Gemini 2.5 Flash for intelligent, context-aware responses.
-*   **Futuristic UI**: Fully mobile-responsive, dark-mode "Glassmorphism" design.
+*   **🎙️ Voice-First Interaction**: Full Speech-to-Text (via local Whisper) and Text-to-Speech (offline) support.
+*   **📈 Real-time Market Data**: Live prices and 24h changes via CoinMarketCap integration.
+*   **🔗 Blockchain Analytics**: On-chain stats (blocks, hashrate, transactions) for BTC, ETH, and more via Blockchair.
+*   **💎 Paper Trading Engine**: 
+    *   Virtual $100,000 cash balance to practice trading.
+    *   Market Buy/Sell, Limit Orders, and Stop-Loss functionality.
+    *   Portfolio tracking with Realized/Unrealized P&L.
+    *   Risk management (Max position limits, daily loss caps).
+*   **📚 RAG Knowledge Base**: AI can query local PDFs/documents for deep project research using ChromaDB.
+*   **🛡️ Hardened Security**: Rate limiting, audit logging, and sensitive data sanitization for all AI tool calls.
+*   **🌊 Glassmorphism UI**: A responsive, dark-mode React interface with smooth animations and streaming text responses.
+
+---
 
 ## 🛠️ Tech Stack
 
-### Backend
-*   **Framework**: FastAPI (Python)
-*   **AI Agent**: Google Agent Development Kit (ADK) + Gemini 2.5 Flash
-*   **Voice Processing**: OpenAI Whisper (STT), pyttsx3 (TTS)
-*   **Vector DB**: ChromaDB (for Knowledge Base)
+### Backend (Python/FastAPI)
+- **AI Orchestration**: Google Agent Development Kit (ADK) + Gemini 2.0 Flash.
+- **Tools Engine**: Model Context Protocol (MCP) server for extensible tool integration.
+- **Database**: MySQL with SQLAlchemy (Portfolio, Trades, Wallets).
+- **Voice**: OpenAI Whisper (STT) + pyttsx3 (TTS) + FFmpeg.
+- **Search**: ChromaDB + Sentence Transformers (RAG).
 
-### Frontend
-*   **Framework**: React 19 + Vite
-*   **Styling**: Tailwind CSS + Custom Animations
-*   **Real-time**: WebSockets for streaming voice/text
+### Frontend (React/Vite)
+- **Styling**: Tailwind CSS + Framer Motion.
+- **Communication**: WebSockets for real-time, low-latency streaming of voice and text.
+
+---
 
 ## ⚙️ Prerequisites
 
-*   **Node.js** (v18+)
-*   **Python** (v3.10 or v3.11)
-*   **FFmpeg** (Required for audio processing)
-    *   *Windows*: `winget install Gyan.FFmpeg`
+1.  **Node.js** (v18+)
+2.  **Python** (v3.10 or v3.11)
+3.  **MySQL Server** (Running locally or remotely)
+4.  **FFmpeg**: Required for audio processing.
+    - *Windows*: `winget install Gyan.FFmpeg`
+    - *Mac*: `brew install ffmpeg`
+
+---
 
 ## 🚀 Installation & Setup
 
-### 1. Backend Setup
+### 1. Clone the Repository
+```bash
+git clone https://github.com/your-username/ai-crypto-chatbot.git
+cd ai-crypto-chatbot
+```
 
+### 2. Backend Setup
 ```bash
 cd backend
 python -m venv venv
@@ -50,9 +68,8 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-**Configuration (.env)**
-Create a `.env` file in the `backend` folder with the following keys:
-
+#### Configuration (.env)
+Create a `.env` file in the `backend` folder:
 ```env
 GOOGLE_API_KEY=your_gemini_api_key
 COINMARKETCAP_API_KEY=your_cmc_key
@@ -60,25 +77,34 @@ COINMARKETCAP_URL=https://pro-api.coinmarketcap.com/v2/cryptocurrency/quotes/lat
 CRYPTOPANIC_API_KEY=your_cryptopanic_key
 CRYPTOPANIC_URL=https://cryptopanic.com/api/developer/v2/posts/
 BLOCKCHAIR_BASE_URL=https://api.blockchair.com
-BLOCKCHAIR_API_KEY=your_blockchair_key (optional)
+DATABASE_URL=mysql+pymysql://user:password@localhost:3306/crypto_db
 ```
 
-### 2. Frontend Setup
+#### Voice Binaries (Whisper)
+Ensure you have the Whisper binaries in `backend/whisper-cli/`. These are excluded from Git to keep the repo small. You can download the `whisper-cli.exe` and `ggml-base.en.bin` model from the whisper.cpp releases.
 
+#### Initialize Database
 ```bash
-cd frontend
+python setup_db_v3.py
+python setup_paper_trading.py
+```
+
+### 3. Frontend Setup
+```bash
+cd ../frontend
 npm install
 ```
 
-## ▶️ Running the App
+---
 
-You need to run both the backend and frontend terminals simultaneously.
+## ▶️ Running the Application
+
+You need two terminals running simultaneously:
 
 **Terminal 1: Backend**
 ```bash
 cd backend
-# Run on port 8001
-python -m uvicorn main:app --host 0.0.0.0 --port 8001 --reload
+python -m uvicorn main:app --port 8000 --reload
 ```
 
 **Terminal 2: Frontend**
@@ -87,12 +113,19 @@ cd frontend
 npm run dev
 ```
 
-Open [http://localhost:5173](http://localhost:5173) in your browser to chat!
+Visit **http://localhost:5173** to start chatting!
 
-## 🤝 Contributing
+---
 
-Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
+## 💡 How It Works
+
+1.  **User Input**: You can type or click the microphone icon to speak.
+2.  **Voice Processing**: If you speak, the React frontend streams audio to the FastAPI backend via WebSockets. The backend uses **FFmpeg** to normalize the audio and **Whisper** to transcribe it.
+3.  **AI Reasoning**: The transcript is sent to **Google Gemini**. Gemini decides if it needs to use a tool (e.g., "What's the price of BTC?").
+4.  **MCP Tools**: The agent calls tools defined in `mcp_server.py`. This server handles the logic for fetching prices, checking the database, or executing trades.
+5.  **Streaming Response**: The AI response is streamed back to the frontend chunk-by-chunk for a fast, responsive feel. If enabled, the frontend will also use **Text-to-Speech** to read the answer aloud.
+
+---
 
 ## 📄 License
-
-[MIT](https://choosealicense.com/licenses/mit/)
+MIT License - See [LICENSE](LICENSE) for details.
