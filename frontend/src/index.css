@@ -29,4 +29,5 @@
     scrollbar-width: none;
     /* Firefox */
   }
-}
+}@keyframes soundwave { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
+.animate-soundwave { animation-name: soundwave; animation-iteration-count: infinite; animation-timing-function: ease-in-out; }

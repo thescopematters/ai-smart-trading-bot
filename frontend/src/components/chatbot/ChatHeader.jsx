@@ -1,19 +1,26 @@
-import React from 'react';
-import { Sparkles, Book } from 'lucide-react';
+import { ChevronLeft, Book } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import tsmLogo from '../../assets/TSM-Logo.png';
+import cryptobotAvatar from '../../assets/cryptobot_avatar_cute.png';
 
-const ChatHeader = ({ onClose, status = 'Online' }) => {
+const ChatHeader = ({ onClose, onOpenHistory, status = 'Online' }) => {
     const navigate = useNavigate();
 
     return (
-        <div className="flex items-center justify-between p-6 border-b border-indigo-50/50 bg-white/40 backdrop-blur-md">
-            <div className="flex items-center gap-4">
+        <div className="flex items-center justify-between p-4 px-6 border-b border-indigo-50/50 bg-white/40 backdrop-blur-md">
+            <div className="flex items-center gap-3">
+                {onOpenHistory && (
+                    <button 
+                        onClick={onOpenHistory} 
+                        className="p-2 -ml-2 rounded-full hover:bg-slate-100 transition text-slate-400 focus:outline-none"
+                        title="Back to Chats"
+                    >
+                        <ChevronLeft className="w-5 h-5" />
+                    </button>
+                )}
                 <div className="relative">
-                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 p-[2px]">
-                        <div className="w-full h-full rounded-full bg-white flex items-center justify-center">
-                            <Sparkles className="w-5 h-5 text-violet-500 animate-pulse" />
-                        </div>
+                    <div className="w-10 h-10 rounded-full overflow-hidden shadow-sm border border-slate-200 bg-white">
+                        <img src={cryptobotAvatar} alt="CryptoBot" className="w-full h-full object-cover" />
                     </div>
                     <span className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-400 border-2 border-white rounded-full"></span>
                 </div>
@@ -22,8 +29,7 @@ const ChatHeader = ({ onClose, status = 'Online' }) => {
                         onClick={() => window.location.href = '/'}
                         className="font-bold text-slate-800 flex items-center gap-2 text-lg cursor-pointer hover:text-indigo-600 transition-colors"
                     >
-                        AI Assistant
-                        <span className="text-[10px] bg-violet-100 text-violet-600 px-2 py-0.5 rounded-full font-medium">TSM</span>
+                        CryptoBot
                     </h3>
                     <p className="text-xs text-slate-500 font-medium">{status}</p>
                 </div>
@@ -36,7 +42,7 @@ const ChatHeader = ({ onClose, status = 'Online' }) => {
                     title="Documentation"
                 >
                     <Book className="w-5 h-5 group-hover:scale-110 transition-transform" />
-                    <span className="font-bold text-sm">Docs</span>
+                    <span className="font-bold text-sm hidden sm:block">Docs</span>
                 </button>
                 <div className="w-16 h-10 relative group">
                     <img

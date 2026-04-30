@@ -28,3 +28,9 @@ chroma_db/
 *.pkl
 data/*.pkl
 vector_store.pkl
+
+# Binaries and Logs
+backend/whisper-cli/
+*.log
+*.exe
+*.dll

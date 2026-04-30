@@ -15,3 +15,5 @@ sentence-transformers
 pypdf
 google-generativeai
 numpy
+sqlalchemy
+pymysql

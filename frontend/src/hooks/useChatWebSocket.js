@@ -1,171 +1,207 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 
-export const useChatWebSocket = (url) => {
-    const [isConnected, setIsConnected] = useState(false);
-    const [messages, setMessages] = useState([]);
-    const [isTyping, setIsTyping] = useState(false);
-    const [currentTranscript, setCurrentTranscript] = useState(""); // For real-time feedback
+// Returns formatted time like "03:38 PM"
+export const formatMessageTime = () => {
+    return new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+};
 
-    // Refs for socket and audio
+export const useChatWebSocket = (url, sessionId) => {
+    const [isConnected, setIsConnected] = useState(false);
+    
+    // Load initial messages from localStorage if they exist for this session
+    const [messages, setMessages] = useState(() => {
+        if (!sessionId) return [];
+        const saved = localStorage.getItem(`crypto_chat_${sessionId}`);
+        if (saved) {
+            try {
+                return JSON.parse(saved);
+            } catch (e) {
+                console.error("Failed to parse cached messages", e);
+                return [];
+            }
+        }
+        return [];
+    });
+
+    const [isTyping, setIsTyping] = useState(false);
+    const [currentTranscript, setCurrentTranscript] = useState(undefined);
+
     const socketRef = useRef(null);
-    const audioQueueRef = useRef([]);
-    const isPlayingRef = useRef(false);
-    const currentAudioRef = useRef(null);
+    const reconnectTimeoutRef = useRef(null);
+
+    // Sync state when sessionId changes (for New Chat / Switching)
+    useEffect(() => {
+        // Clear any pending reconnects when session changes
+        if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
+        }
+        
+        if (!sessionId) {
+            setMessages([]);
+            return;
+        }
+        
+        const saved = localStorage.getItem(`crypto_chat_${sessionId}`);
+        if (saved) {
+            try {
+                setMessages(JSON.parse(saved));
+            } catch (e) {
+                setMessages([]);
+            }
+        } else {
+            setMessages([]);
+        }
+        setIsTyping(false);
+    }, [sessionId]);
+
+    // Save messages to localStorage whenever they change
+    useEffect(() => {
+        if (sessionId && messages.length > 0) {
+            localStorage.setItem(`crypto_chat_${sessionId}`, JSON.stringify(messages));
+            // Trigger an event so the Conversation List can update instantly
+            window.dispatchEvent(new Event('chat_history_updated'));
+        }
+    }, [messages, sessionId]);
 
     const connect = useCallback(() => {
-        if (socketRef.current?.readyState === WebSocket.OPEN) return;
+        if (!sessionId) return; 
+        if (socketRef.current?.readyState === WebSocket.OPEN || socketRef.current?.readyState === WebSocket.CONNECTING) return;
 
-        socketRef.current = new WebSocket(url);
+        // Clear existing timeout if manually connecting
+        if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+            reconnectTimeoutRef.current = null;
+        }
 
-        socketRef.current.onopen = () => {
-            console.log("WebSocket Connected");
+        const baseUrl = url.replace(/\/user-session-1$/, '').replace(/\/$/, '');
+        const wsUrl = `${baseUrl}/${sessionId}`; 
+        
+        console.log('Connecting to WebSocket:', wsUrl);
+        const socket = new WebSocket(wsUrl);
+        socketRef.current = socket;
+
+        socket.onopen = () => {
+            if (socketRef.current !== socket) {
+                socket.close();
+                return;
+            }
+            console.log('WebSocket connected for', sessionId);
             setIsConnected(true);
         };
 
-        socketRef.current.onclose = () => {
-            console.log("WebSocket Disconnected");
+        socket.onclose = () => {
             setIsConnected(false);
-            // Attempt reconnect after 3s
-            setTimeout(() => {
-                console.log("Attempting to reconnect...");
-                connect();
-            }, 3000);
+            // Only reconnect if this is still the active socket and we have a session
+            if (socketRef.current === socket && sessionId) {
+                console.log('WebSocket closed, reconnecting in 3s...');
+                reconnectTimeoutRef.current = setTimeout(() => connect(), 3000);
+            }
         };
 
-        socketRef.current.onmessage = async (event) => {
+        socket.onmessage = async (event) => {
+            if (socketRef.current !== socket) return;
             const data = JSON.parse(event.data);
-
-            if (data.type === "transcript") {
-                // User's text recognized
-                setIsTyping(true);
-                setMessages(prev => [...prev, { id: Date.now(), text: data.text, isUser: true }]);
-            } else if (data.type === "response.text_partial") {
-                setIsTyping(false); // We have started receiving content
+            
+            if (data.type === 'transcript') {
+                if (data.is_dictation) {
+                    setCurrentTranscript(data.text);
+                    setTimeout(() => setCurrentTranscript(undefined), 100);
+                } else {
+                    setIsTyping(true);
+                }
+            } else if (data.type === 'response.text_partial') {
+                setIsTyping(false);
                 setMessages(prev => {
-                    const lastMsg = prev[prev.length - 1];
-                    if (lastMsg && !lastMsg.isUser) {
-                        // Append to existing AI message
-                        return [
-                            ...prev.slice(0, -1),
-                            { ...lastMsg, text: lastMsg.text + data.text }
-                        ];
-                    } else {
-                        // Create new AI message
-                        return [...prev, { id: Date.now(), text: data.text, isUser: false }];
+                    const last = prev[prev.length - 1];
+                    if (last && !last.isUser) {
+                        return [...prev.slice(0, -1), { ...last, text: last.text + data.text }];
                     }
+                    return [...prev, { id: Date.now(), text: data.text, isUser: false, timestamp: formatMessageTime() }];
                 });
-            } else if (data.type === "response.text") {
-                // Final text - ensure full consistency/final update
-                // Optional: we can just ignore this if we trust partials, or use it to "seal" the message
-                // For now, let's just make sure the state matches this final text
+            } else if (data.type === 'response.text') {
                 setMessages(prev => {
-                    const lastMsg = prev[prev.length - 1];
-                    if (lastMsg && !lastMsg.isUser) {
-                        // Overwrite with full final text to be safe
-                        return [...prev.slice(0, -1), { ...lastMsg, text: data.text }];
+                    const last = prev[prev.length - 1];
+                    if (last && !last.isUser) {
+                        return [...prev.slice(0, -1), { ...last, text: data.text }];
                     }
                     return prev;
                 });
                 setIsTyping(false);
-            } else if (data.type === 'transcript_partial') {
-                setCurrentTranscript(data.text);
-            } else if (data.type === 'transcript') {
-                setCurrentTranscript(data.text);
-                setMessages(prev => [...prev, { id: Date.now(), text: data.text, isUser: true }]);
-                setCurrentTranscript("");
-                setIsTyping(true);
-            } else if (data.type === "response.audio") {
-                // Queue Audio Chunk
-                playAudioChunk(data.data);
-            } else if (data.type === "error") {
-                console.error("Socket Error:", data.message);
+            } else if (data.type === 'error') {
+                console.error('Server error:', data.message);
                 setIsTyping(false);
+                setMessages(prev => [
+                    ...prev, 
+                    { 
+                        id: Date.now(), 
+                        text: `⚠️ **System Error:** ${data.message}`, 
+                        isUser: false, 
+                        timestamp: formatMessageTime(),
+                        isError: true 
+                    }
+                ]);
             }
         };
-    }, [url]);
 
-    const playAudioChunk = (base64Audio) => {
-        const audioSrc = `data:audio/mp3;base64,${base64Audio}`;
-        audioQueueRef.current.push(audioSrc);
-        processQueue();
-    };
-
-    const processQueue = () => {
-        if (isPlayingRef.current || audioQueueRef.current.length === 0) return;
-
-        isPlayingRef.current = true;
-        const nextAudio = audioQueueRef.current.shift();
-        const audio = new Audio(nextAudio);
-        currentAudioRef.current = audio;
-
-        audio.play().catch(e => console.error("Playback error", e));
-
-        audio.onended = () => {
-            isPlayingRef.current = false;
-            processQueue();
+        socket.onerror = (err) => {
+            console.error('WebSocket error:', err);
         };
-    };
+    }, [url, sessionId]);
 
-    const stopAudio = () => {
-        if (currentAudioRef.current) {
-            currentAudioRef.current.pause();
-            currentAudioRef.current = null;
-        }
-        audioQueueRef.current = [];
-        isPlayingRef.current = false;
-
-        // Send stop signal to backend to clear its buffers
+    const sendMessage = (text) => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
-            socketRef.current.send(JSON.stringify({ type: "stop" }));
+            setMessages(prev => [...prev, { id: Date.now(), text, isUser: true, timestamp: formatMessageTime() }]);
+            socketRef.current.send(JSON.stringify({ type: 'text_input', text }));
+            setIsTyping(true);
+        } else {
+            alert('Not connected. Please wait a moment and try again.');
+            if (!isConnected) connect();
         }
     };
 
     const sendAudioChunk = (blob) => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
-            // Send binary directly? Or array buffer?
-            // WebSocket.send supports Blob or ArrayBuffer
             socketRef.current.send(blob);
         }
     };
 
     const sendTranscribeRequest = () => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
-            socketRef.current.send(JSON.stringify({ type: "transcribe_request" }));
-        }
-    };
-
-    const sendMessage = (text) => {
-        if (socketRef.current?.readyState === WebSocket.OPEN) {
-            socketRef.current.send(JSON.stringify({
-                type: "text_input",
-                text: text
-            }));
-            // We optimize by setting typing true locally usually, but backend will echo/respond fast
-            setIsTyping(true);
-        } else {
-            console.warn("WebSocket not connected");
-            alert("Not connected to server. Please wait for reconnection.");
-            // Optional: Try reconnecting manually?
-            if (!isConnected) connect();
+            socketRef.current.send(JSON.stringify({ type: 'transcribe_request' }));
         }
     };
 
     useEffect(() => {
-        connect();
+        // Debounce the connection to handle React Strict Mode's double-mount 
+        // and rapid session switching.
+        const timeout = setTimeout(() => {
+            connect();
+        }, 100);
+
         return () => {
-            socketRef.current?.close();
+            clearTimeout(timeout);
+            // Cleanup: stop reconnects and close socket
+            if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
+            }
+            if (socketRef.current) {
+                const socket = socketRef.current;
+                socketRef.current = null; // Prevent onclose from triggering reconnect
+                socket.close();
+            }
         };
-    }, [connect]);
+    }, [connect, sessionId]);
 
     return {
         isConnected,
         messages,
-        setMessages, // to allow manual clearing or adding
+        setMessages,
         isTyping,
+        sendMessage,
         sendAudioChunk,
         sendTranscribeRequest,
-        stopAudio,
-        sendMessage,
-        currentTranscript
+        currentTranscript,
+        setCurrentTranscript
     };
 };

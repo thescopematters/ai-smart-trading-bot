@@ -5,7 +5,7 @@ Origins
 Bitcoin was introduced in October 2008 through a whitepaper titled “Bitcoin: A Peer-to-Peer Electronic Cash System” published by an anonymous individual or group under the pseudonym Satoshi Nakamoto. The paper proposed a decentralized digital currency that would operate without the need for a central authority such as a bank or government. Instead, transactions would be verified through cryptography and recorded on a distributed ledger called the blockchain.
 
 On January 3, 2009, the Bitcoin network officially launched when Nakamoto mined the first block, marking the beginning of the cryptocurrency era. The software was released as open-source, allowing developers worldwide to contribute to its development and security.
-
+    
 The Genesis Block
 
 The first block in the Bitcoin blockchain is known as the Genesis Block (Block 0). It was mined by Satoshi Nakamoto on January 3, 2009. Embedded within this block was a message:
