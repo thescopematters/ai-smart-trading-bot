@@ -105,7 +105,7 @@ You need two terminals running simultaneously:
 ```bash
 cd backend
 python -m uvicorn main:app --port 8000 --reload
-python main.py
+# python main.py
 ```
 
 **Terminal 2: Frontend**
