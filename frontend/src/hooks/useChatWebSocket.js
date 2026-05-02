@@ -17,13 +17,14 @@ export const useChatWebSocket = (url, sessionId) => {
                 return JSON.parse(saved);
             } catch (e) {
                 console.error("Failed to parse cached messages", e);
-                return [];
             }
         }
-        return [];
+        // Always start a new session with the default greeting
+        return [{ id: 1, text: "Hello! I'm your crypto AI assistant. How can I help you today?", isUser: false, timestamp: formatMessageTime() }];
     });
 
     const [isTyping, setIsTyping] = useState(false);
+    const [isSessionEnd, setIsSessionEnd] = useState(false);
     const [currentTranscript, setCurrentTranscript] = useState(undefined);
 
     const socketRef = useRef(null);
@@ -45,12 +46,27 @@ export const useChatWebSocket = (url, sessionId) => {
         const saved = localStorage.getItem(`crypto_chat_${sessionId}`);
         if (saved) {
             try {
-                setMessages(JSON.parse(saved));
+                const parsed = JSON.parse(saved);
+                setMessages(parsed);
+
+                // Check if session is stale (last message > 10 minutes ago)
+                const lastMsg = parsed[parsed.length - 1];
+                const lastMsgTime = lastMsg?.id || 0;
+                const minutesSinceLastMsg = (Date.now() - lastMsgTime) / 60000;
+
+                if (parsed.length > 1 && minutesSinceLastMsg > 10) {
+                    setIsSessionEnd(true);
+                } else {
+                    // Check if it was already ended by the backend in this session
+                    setIsSessionEnd(false);
+                }
             } catch (e) {
                 setMessages([]);
+                setIsSessionEnd(false);
             }
         } else {
-            setMessages([]);
+            setMessages([{ id: 1, text: "Hello! I'm your crypto AI assistant. How can I help you today?", isUser: false, timestamp: formatMessageTime() }]);
+            setIsSessionEnd(false);
         }
         setIsTyping(false);
     }, [sessionId]);
@@ -88,6 +104,22 @@ export const useChatWebSocket = (url, sessionId) => {
             }
             console.log('WebSocket connected for', sessionId);
             setIsConnected(true);
+
+            // Auto-retry: if the last message was from the user (bot never responded),
+            // re-send it so the user doesn't see a dead-end conversation.
+            const saved = localStorage.getItem(`crypto_chat_${sessionId}`);
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    const lastMsg = parsed[parsed.length - 1];
+                    if (lastMsg && lastMsg.isUser && lastMsg.text) {
+                        console.log('Auto-retrying unanswered message:', lastMsg.text);
+                        socket.send(JSON.stringify({ type: 'text_input', text: lastMsg.text }));
+                    }
+                } catch (e) {
+                    // ignore
+                }
+            }
         };
 
         socket.onclose = () => {
@@ -127,6 +159,12 @@ export const useChatWebSocket = (url, sessionId) => {
                     }
                     return prev;
                 });
+                setIsTyping(false);
+            } else if (data.type === 'response.text_new') {
+                setMessages(prev => [...prev, { id: Date.now(), text: data.text, isUser: false, timestamp: formatMessageTime() }]);
+                setIsTyping(false);
+            } else if (data.type === 'session.end') {
+                setIsSessionEnd(true);
                 setIsTyping(false);
             } else if (data.type === 'error') {
                 console.error('Server error:', data.message);
@@ -172,6 +210,12 @@ export const useChatWebSocket = (url, sessionId) => {
         }
     };
 
+    const sendTypingIndicator = () => {
+        if (socketRef.current?.readyState === WebSocket.OPEN) {
+            socketRef.current.send(JSON.stringify({ type: 'user_typing' }));
+        }
+    };
+
     useEffect(() => {
         // Debounce the connection to handle React Strict Mode's double-mount 
         // and rapid session switching.
@@ -202,6 +246,8 @@ export const useChatWebSocket = (url, sessionId) => {
         sendAudioChunk,
         sendTranscribeRequest,
         currentTranscript,
-        setCurrentTranscript
+        setCurrentTranscript,
+        sendTypingIndicator,
+        isSessionEnd
     };
 };

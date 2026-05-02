@@ -39,7 +39,9 @@ const stripMarkdown = (text) => {
 
 const ChatbotPanel = () => {
     const [sessions, setSessions] = useState([]);
-    const [showHistory, setShowHistory] = useState(false);
+    const [showHistory, setShowHistory] = useState(() => {
+        return localStorage.getItem('crypto_show_history') === 'true';
+    });
 
     // Auto-initialize to the last used session, or create a new one immediately
     const [activeSessionId, setActiveSessionId] = useState(() => {
@@ -62,6 +64,11 @@ const ChatbotPanel = () => {
         }
     }, [activeSessionId]);
 
+    // Persist showHistory state across refreshes
+    useEffect(() => {
+        localStorage.setItem('crypto_show_history', showHistory ? 'true' : 'false');
+    }, [showHistory]);
+
     const loadSessions = () => {
         const loadedSessions = [];
         for (let i = 0; i < localStorage.length; i++) {
@@ -79,11 +86,16 @@ const ChatbotPanel = () => {
                             preview = stripMarkdown(lastMsg.text);
                         }
 
+                        // Check if session is ended (10 minutes of inactivity)
+                        const minutesSinceLastMsg = (Date.now() - lastTimeId) / 60000;
+                        const isEnded = minutesSinceLastMsg > 10;
+
                         loadedSessions.push({
                             id,
-                            preview,
+                            preview: isEnded ? "Chat has ended." : preview,
                             time: getRelativeTime(lastTimeId),
-                            timestampRaw: lastTimeId
+                            timestampRaw: lastTimeId,
+                            isEnded
                         });
                     }
                 } catch (e) {
@@ -180,15 +192,12 @@ const ActiveChat = ({ chatControls, onOpenHistory }) => {
         sendMessage,
         sendAudioChunk,
         sendTranscribeRequest,
-        currentTranscript
+        currentTranscript,
+        sendTypingIndicator,
+        isSessionEnd
     } = chatControls;
 
-    // Add initial greeting if empty
-    useEffect(() => {
-        if (messages.length === 0) {
-            setMessages([{ id: 1, text: "Hello! I'm your crypto AI assistant. How can I help you today?", isUser: false }]);
-        }
-    }, [messages.length, setMessages]);
+
 
     const handleSendMessage = (text) => {
         sendMessage(text);
@@ -204,34 +213,47 @@ const ActiveChat = ({ chatControls, onOpenHistory }) => {
 
             <ChatMessages messages={messages} isTyping={isTyping} />
 
-            {messages.length <= 1 && (
-                <div className="px-4 pb-2 grid grid-cols-2 gap-2">
-                    {[
-                        "What is the price of Bitcoin?",
-                        "What is the latest crypto news?",
-                        "Show me the network stats for Dogecoin",
-                        "Tell me the history of Bitcoin"
-                    ].map((prompt, index) => (
-                        <button
-                            key={index}
-                            onClick={() => handleSendMessage(prompt)}
-                            className="text-left text-xs bg-white hover:bg-white/80 border border-white/60 hover:border-violet-200 text-slate-600 hover:text-violet-600 p-4 rounded-xl transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5"
-                        >
-                            {prompt}
-                        </button>
-                    ))}
+            {isSessionEnd ? (
+                <div className="p-6 text-center border-t border-slate-100 bg-white/40 backdrop-blur-xl">
+                    <p className="text-slate-500 text-sm font-medium leading-relaxed">
+                        The chat has ended.<br />
+                        <span className="text-slate-400">Start new conversation.</span>
+                    </p>
                 </div>
-            )}
+            ) : (
+                <>
+                    {messages.length <= 1 && (
+                        <div className="px-4 pb-2 grid grid-cols-2 gap-2">
+                            {[
+                                "What is the price of Bitcoin?",
+                                "What is the latest crypto news?",
+                                "Show me the network stats for Dogecoin",
+                                "Tell me the history of Bitcoin"
+                            ].map((prompt, index) => (
+                                <button
+                                    key={index}
+                                    onClick={() => handleSendMessage(prompt)}
+                                    className="text-left text-xs bg-white hover:bg-white/80 border border-white/60 hover:border-violet-200 text-slate-600 hover:text-violet-600 p-4 rounded-xl transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5"
+                                >
+                                    {prompt}
+                                </button>
+                            ))}
+                        </div>
+                    )}
 
-            <ChatInput
-                onSendMessage={handleSendMessage}
-                onAudioChunk={sendAudioChunk}
-                onRecordingStop={() => {
-                    sendTranscribeRequest();
-                }}
-                currentTranscript={currentTranscript}
-                isTyping={isTyping}
-            />
+                    <ChatInput
+                        onSendMessage={handleSendMessage}
+                        onAudioChunk={sendAudioChunk}
+                        onRecordingStop={() => {
+                            sendTranscribeRequest();
+                        }}
+                        currentTranscript={currentTranscript}
+                        isTyping={isTyping}
+                        onTyping={sendTypingIndicator}
+                        isSessionEnd={isSessionEnd}
+                    />
+                </>
+            )}
         </>
     );
 };

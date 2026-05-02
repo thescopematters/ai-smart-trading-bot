@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Mic, MicOff, Loader2 } from 'lucide-react';
 
-const ChatInput = ({ onSendMessage, onAudioChunk, onRecordingStop, currentTranscript, isTyping }) => {
+const ChatInput = ({ onSendMessage, onAudioChunk, onRecordingStop, currentTranscript, isTyping, onTyping, isSessionEnd }) => {
     const [message, setMessage] = useState('');
     const [isListening, setIsListening] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -91,6 +91,11 @@ const ChatInput = ({ onSendMessage, onAudioChunk, onRecordingStop, currentTransc
         }
     };
 
+    const handleChange = (e) => {
+        setMessage(e.target.value);
+        if (onTyping) onTyping();
+    };
+
     return (
         <form onSubmit={handleSubmit} className="p-4 bg-white/40 backdrop-blur-xl relative border-t border-white/40 shadow-inner">
             <div className={`flex items-end gap-3 bg-white rounded-3xl p-2 relative transition-all duration-500 ease-out ${isListening
@@ -102,12 +107,12 @@ const ChatInput = ({ onSendMessage, onAudioChunk, onRecordingStop, currentTransc
                 <button
                     type="button"
                     onClick={handleVoiceClick}
-                    disabled={isProcessing || isTyping}
-                    title={isListening ? 'Stop recording' : isProcessing ? 'Processing...' : isTyping ? 'AI is thinking...' : 'Start voice input'}
+                    disabled={isProcessing || isTyping || isSessionEnd}
+                    title={isSessionEnd ? 'Session ended' : isListening ? 'Stop recording' : isProcessing ? 'Processing...' : isTyping ? 'AI is thinking...' : 'Start voice input'}
                     className={`relative z-10 flex items-center justify-center w-12 h-12 rounded-full transition-all duration-300 group shrink-0 mb-0.5 ${isListening
                         ? 'bg-gradient-to-tr from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-500/40'
-                        : (isProcessing || isTyping)
-                            ? 'bg-amber-50 text-amber-500 border border-amber-200 cursor-wait'
+                        : (isProcessing || isTyping || isSessionEnd)
+                            ? 'bg-slate-50 text-slate-300 border border-slate-100 cursor-not-allowed'
                             : 'bg-slate-50 text-slate-400 hover:bg-indigo-50 border border-slate-100 hover:text-indigo-500 hover:shadow-md'
                         }`}
                 >
@@ -140,19 +145,19 @@ const ChatInput = ({ onSendMessage, onAudioChunk, onRecordingStop, currentTransc
                         ref={textareaRef}
                         rows={1}
                         value={message}
-                        onChange={(e) => setMessage(e.target.value)}
+                        onChange={handleChange}
                         onKeyDown={handleKeyDown}
-                        placeholder="Message Crypto AI..."
-                        className={`w-full bg-transparent border-0 px-2 py-3 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-0 focus:ring-offset-0 focus:border-0 outline-none transition-opacity duration-300 resize-none scrollbar-hide max-h-[200px] ${isListening || isProcessing ? 'opacity-60' : 'opacity-100'
+                        placeholder={isSessionEnd ? "Your chat has ended. Start a new conversation." : "Message Crypto AI..."}
+                        className={`w-full bg-transparent border-0 px-2 py-3 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-0 focus:ring-offset-0 focus:border-0 outline-none transition-opacity duration-300 resize-none scrollbar-hide max-h-[200px] ${isListening || isProcessing || isSessionEnd ? 'opacity-60' : 'opacity-100'
                             }`}
                         style={{ WebkitTapHighlightColor: 'transparent', boxShadow: 'none' }}
-                        disabled={isListening || isProcessing}
+                        disabled={isListening || isProcessing || isSessionEnd}
                     />
                 </div>
 
                 <button
                     type="submit"
-                    disabled={!message.trim() || isProcessing || isTyping}
+                    disabled={!message.trim() || isProcessing || isTyping || isSessionEnd}
                     className="p-3 mr-1 mb-0.5 rounded-full bg-slate-900 text-white hover:bg-black disabled:opacity-30 disabled:cursor-not-allowed transition-all duration-300 group shadow-md shrink-0"
                 >
                     <Send className="w-4 h-4 translate-x-[1px] -translate-y-[1px] group-hover:translate-x-1 group-hover:-translate-y-1 transition-transform" />

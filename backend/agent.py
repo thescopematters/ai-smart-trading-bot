@@ -55,24 +55,36 @@ GEMINI_MODEL = "gemini-flash-latest"
 #   4. Auto-discover all @mcp.tool() decorated functions
 # -------------------------------------------------------------------------
 
-# Build the path to our MCP server script
+# Build the path to our MCP server scripts
 MCP_SERVER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_server.py")
+MCP_TRADING_SERVER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_trading_server.py")
 
 # Build the path to the Python executable inside our virtual environment
 PYTHON_EXE = sys.executable
 
 logger.info(f"MCP Server Path: {MCP_SERVER_PATH}")
+logger.info(f"MCP Trading Server Path: {MCP_TRADING_SERVER_PATH}")
 logger.info(f"Python Executable: {PYTHON_EXE}")
 
-# Create the MCP Toolset — this is the REAL MCP client
-# It will launch mcp_server.py as a subprocess and connect via STDIO
+# Create the MCP Toolsets
 mcp_toolset = MCPToolset(
     connection_params=StdioConnectionParams(
         server_params=StdioServerParameters(
             command=PYTHON_EXE,
             args=[MCP_SERVER_PATH],
         ),
-        timeout=30.0,  # 30 second timeout for tool calls
+        timeout=30.0,
+    )
+)
+
+# To instantly disable Paper Trading, simply comment out trading_toolset here and in the LlmAgent tools list.
+trading_toolset = MCPToolset(
+    connection_params=StdioConnectionParams(
+        server_params=StdioServerParameters(
+            command=PYTHON_EXE,
+            args=[MCP_TRADING_SERVER_PATH],
+        ),
+        timeout=30.0,
     )
 )
 
@@ -181,8 +193,12 @@ FORMATTING & TABLES:
 
 17. Make responses visually clean and easy to scan. Important insights should stand out via **bold text**.
 """,
-    tools=[mcp_toolset],  # Pass the MCPToolset — ADK handles the rest
+    tools=[mcp_toolset, trading_toolset],  # Pass both MCPToolsets
 )
 
 # Export for main.py
 root_agent = crypto_agent
+
+# if 2 Servers:
+# The Agent will automatically ask both servers what tools they have, 
+# combine the lists, and decide which tool to use based on the user's question!
