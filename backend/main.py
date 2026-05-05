@@ -349,8 +349,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             hard_timeout_task.cancel()
         hard_timeout_task = None
         client_cooldowns.pop(client_id, None)
-        session_nudge_counts.pop(client_id, None)
-        # Note: We do NOT pop connection count, so it persists if the server stays up
+        # Note: We do NOT pop session_nudge_counts or session_connection_counts, so they persist if the server stays up
 
     # Start cold start timer and hard timeout monitor
     # --- Initial State Sync ---
