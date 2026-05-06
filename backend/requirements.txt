@@ -17,3 +17,6 @@ google-generativeai
 numpy
 sqlalchemy
 pymysql
+bcrypt
+python-jose[cryptography]
+slowapi

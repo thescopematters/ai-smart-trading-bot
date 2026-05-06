@@ -171,41 +171,41 @@ def get_live_price(symbol: str, currency: str = "USD") -> str:
         logger.error(f"❌ [TOOL ERROR] Price Tool failed: {e}")
         return f"Unable to fetch price for {symbol} at this time."
 
-# @mcp.tool()
-# def get_trending_news(limit: int = 5) -> str:
-#     """Fetch the latest trending crypto news specifically for fundamental analysis."""
-#     if not rate_limiter.check("get_trending_news"):
-#         return "Rate limit exceeded. Please wait before fetching news again."
+@mcp.tool()
+def get_trending_news(limit: int = 5) -> str:
+    """Fetch the latest trending crypto news specifically for fundamental analysis."""
+    if not rate_limiter.check("get_trending_news"):
+        return "Rate limit exceeded. Please wait before fetching news again."
 
-#     logger.info(f"🔍 [TOOL CALL] Fetching trending news (Limit: {limit})")
+    logger.info(f"🔍 [TOOL CALL] Fetching trending news (Limit: {limit})")
 
-#     api_key = os.getenv("CRYPTOPANIC_API_KEY")
-#     base_url = os.getenv("CRYPTOPANIC_URL")
+    api_key = os.getenv("CRYPTOPANIC_API_KEY")
+    base_url = os.getenv("CRYPTOPANIC_URL")
 
-#     if not api_key:
-#         return "Error: CryptoPanic API Key missing."
+    if not api_key:
+        return "Error: CryptoPanic API Key missing."
 
-#     params = {"auth_token": api_key, "filter": "trending", "limit": limit}
+    params = {"auth_token": api_key, "filter": "trending", "limit": limit}
 
-#     try:
-#         response = requests.get(base_url, params=params, timeout=10)
-#         data = response.json()
-#         results = data.get("results", [])
-#         if not results:
-#             res = "Market is quiet - no major trending news found right now."
-#             logger.info(f"✅ [TOOL RESPONSE] {res}")
-#             return res
+    try:
+        response = requests.get(base_url, params=params, timeout=10)
+        data = response.json()
+        results = data.get("results", [])
+        if not results:
+            res = "Market is quiet - no major trending news found right now."
+            logger.info(f"✅ [TOOL RESPONSE] {res}")
+            return res
 
-#         news_lines = [f"--- Trending News ({limit} items) ---"]
-#         for item in results:
-#             news_lines.append(f"- {item.get('title')} (Source: {item.get('source', {}).get('title')})")
+        news_lines = [f"--- Trending News ({limit} items) ---"]
+        for item in results:
+            news_lines.append(f"- {item.get('title')} (Source: {item.get('source', {}).get('title')})")
 
-#         result = "\n".join(news_lines)
-#         logger.info(f"✅ [TOOL RESPONSE] Successfully returned {len(results)} news items.")
-#         return result
-#     except Exception as e:
-#         logger.error(f"❌ [TOOL ERROR] News Tool failed: {e}")
-#         return "Failed to retrieve market news."
+        result = "\n".join(news_lines)
+        logger.info(f"✅ [TOOL RESPONSE] Successfully returned {len(results)} news items.")
+        return result
+    except Exception as e:
+        logger.error(f"❌ [TOOL ERROR] News Tool failed: {e}")
+        return "Failed to retrieve market news."
 
 @mcp.tool()
 def get_blockchain_stats(chain: str = "bitcoin") -> dict:

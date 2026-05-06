@@ -8,6 +8,7 @@
 import os
 import json
 import chromadb
+import traceback
 from chromadb.utils import embedding_functions
 from pypdf import PdfReader
 
@@ -54,8 +55,36 @@ def initialize_rag():
 
     except Exception as e:
         print(f"RAG Initialization Failed: {e}")
-        import traceback
         traceback.print_exc()
+
+def ingest_file(file_path: str):
+    """Ingests a single file into the vector database."""
+    global _collection
+    if _collection is None:
+        initialize_rag()
+    
+    filename = os.path.basename(file_path)
+    
+    text = ""
+    if filename.endswith(".pdf"):
+        text = _read_pdf(file_path)
+    elif filename.endswith(".txt") or filename.endswith(".md"):
+        try:
+            with open(file_path, "r", encoding="utf-8") as f:
+                text = f.read()
+        except Exception:
+            pass
+    
+    if text:
+        # Check if this source exists
+        existing = _collection.get(where={"source": filename})
+        if existing and len(existing['ids']) > 0:
+            print(f"RAG: {filename} already exists in vector DB. Skipping.")
+            return True
+
+        _add_text_to_db(filename, text)
+        return True
+    return False
 
 def _ingest_folder(folder_path):
     """Scans and ingests all documents inside a folder."""
@@ -174,3 +203,19 @@ def search_knowledge_base(query: str, n_results: int = 3) -> str:    # This is w
         context_data.append({"source": source, "content": doc})
 
     return json.dumps(context_data, indent=2)
+
+def delete_document(filename: str):
+    """Removes a document's embeddings from the vector store."""
+    global _collection
+    if _collection is None:
+        initialize_rag()
+    
+    if _collection:
+        try:
+            _collection.delete(where={"source": filename})
+            print(f"RAG: Deleted vectors for {filename}")
+            return True
+        except Exception as e:
+            print(f"RAG Delete Error: {e}")
+            return False
+    return False

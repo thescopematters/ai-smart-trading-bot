@@ -9,9 +9,15 @@ import traceback
 import time
 import random
 import uvicorn
+import uuid
+from typing import List, Dict, Optional
+from datetime import datetime, timedelta, timezone
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Depends, HTTPException, status, Request, UploadFile, File
+from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
 from google.adk.runners import Runner
 from google.adk.sessions import InMemorySessionService
@@ -26,6 +32,10 @@ try:
 except ImportError:
     from . import rag_service
 
+# Import DB and Auth
+from database import get_db, User, AdminUser, ChatSession, ChatMessage, DefaultQuestion, Document
+from auth import get_password_hash, verify_password, create_access_token, get_current_user, get_current_admin, limiter
+
 # Import Gemini error types for smart retry logic
 try:
     from google.genai.errors import ServerError as GeminiServerError
@@ -38,6 +48,41 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger("CryptoBackend")
+
+from database import engine, Base
+logger.info("Initializing database tables...")
+Base.metadata.create_all(bind=engine)
+
+def sync_rag_documents(db: Session):
+    """Scans ./data folder and syncs with MySQL crypto_rag_documents table."""
+    data_folder = "./data"
+    if not os.path.exists(data_folder):
+        os.makedirs(data_folder, exist_ok=True)
+        return
+
+    # Valid extensions
+    valid_exts = ('.pdf', '.txt', '.md', '.docx')
+    files = [f for f in os.listdir(data_folder) if f.lower().endswith(valid_exts)]
+    
+    # Get existing filenames from DB
+    existing_docs = db.query(Document.file_name).all()
+    existing_filenames = {d[0] for d in existing_docs}
+
+    synced_count = 0
+    for filename in files:
+        if filename not in existing_filenames:
+            new_doc = Document(
+                file_name=filename,
+                source="system",
+                status="processed"
+            )
+            db.add(new_doc)
+            synced_count += 1
+            logger.info(f"Sync: Added {filename} to RAG Knowledge tracking (Source: system)")
+    
+    if synced_count > 0:
+        db.commit()
+    return synced_count
 
 load_dotenv()
 
@@ -67,6 +112,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Apply Rate Limiter
+app.state.limiter = limiter
+
 # Initialize ADK Services
 session_service = InMemorySessionService()
 artifact_service = InMemoryArtifactService()
@@ -88,6 +136,131 @@ def health_check():
         "mcp_transport": "STDIO",
         "whisper": os.path.exists(WHISPER_EXE),
     }
+
+# ==========================================
+# REST API - AUTHENTICATION
+# ==========================================
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+    client_id: Optional[str] = None
+
+class RegisterRequest(BaseModel):
+    email: str
+    username: str
+    password: str
+    display_name: str = ""
+    client_id: Optional[str] = None
+
+@app.post("/api/auth/register")
+@limiter.limit("5/minute")
+def register(request: Request, data: RegisterRequest, db: Session = Depends(get_db)):
+    if db.query(User).filter(User.email == data.email).first():
+        raise HTTPException(status_code=400, detail="Email already registered")
+    
+    user = User(
+        email=data.email,
+        username=data.username,
+        password_hash=get_password_hash(data.password),
+        display_name=data.display_name or data.username,
+        role="user",
+        is_guest=False
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    
+    # Handle Session Migration
+    # Session migration disabled
+    access_token = create_access_token(data={"sub": user.email})
+    return {"access_token": access_token, "token_type": "bearer", "user": {"id": user.id, "email": user.email, "username": user.username, "role": "user"}}
+
+@app.post("/api/auth/login")
+@limiter.limit("10/minute")
+def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
+    # Check for Admin Credentials from .env as fallback
+    admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")
+    admin_password = os.getenv("ADMIN_PASSWORD", "adminpassword123")
+    
+    user = db.query(User).filter(User.email == data.email).first()
+    if not user:
+        # Fallback to username
+        user = db.query(User).filter(User.username == data.email).first()
+
+    # If it matches the ENV admin credentials, we can manually authenticate
+    if not user and data.email == admin_email and data.password == admin_password:
+        # Check if admin exists in DB, if not, create a temporary session user
+        # Note: In a real app, you'd ensure the admin is in the DB, but for now we fallback.
+        access_token = create_access_token(data={"sub": admin_email})
+        return {
+            "access_token": access_token, 
+            "token_type": "bearer", 
+            "user": {"id": 999, "email": admin_email, "username": "admin", "role": "admin"}
+        }
+        
+    if not user or not user.password_hash or not verify_password(data.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Incorrect email or password")
+    
+    access_token = create_access_token(data={"sub": user.email or user.username})
+    return {"access_token": access_token, "token_type": "bearer", "user": {"id": user.id, "email": user.email, "username": user.username, "role": "user"}}
+
+@app.post("/api/auth/guest")
+@limiter.limit("20/minute")
+def create_guest(request: Request, db: Session = Depends(get_db)):
+    guest_username = f"guest_{uuid.uuid4().hex[:12]}"
+    user = User(
+        username=guest_username,
+        display_name="Guest User",
+        role="user",
+        is_guest=True
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    
+    access_token = create_access_token(data={"sub": user.username})
+    return {"access_token": access_token, "token_type": "bearer", "user": {"id": user.id, "username": user.username, "role": "user"}}
+
+@app.get("/api/auth/me")
+def get_me(current_user: User = Depends(get_current_user)):
+    return {"id": current_user.id, "email": current_user.email, "username": current_user.username, "role": "user", "display_name": current_user.display_name}
+
+@app.get("/api/sessions")
+def list_sessions(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Retrieves all chat sessions for the logged-in user from the database."""
+    sessions = db.query(ChatSession).filter(ChatSession.user_id == current_user.id).order_by(ChatSession.last_message_at.desc()).all()
+    
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
+    return [{
+        "id": s.id,
+        "preview": s.last_message or "New Conversation",
+        "last_message_at": s.last_message_at.replace(tzinfo=timezone.utc).timestamp() * 1000 if s.last_message_at else 0,
+        "is_ended": (
+            s.last_message_at is not None and 
+            (now - s.last_message_at.replace(tzinfo=timezone.utc)).total_seconds() >= 300
+        )
+    } for s in sessions]
+
+@app.delete("/api/sessions/{session_id}")
+def delete_session(session_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id == current_user.id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    db.delete(session)
+    db.commit()
+    return {"status": "success", "message": "Session deleted"}
+
+# ==========================================
+# REST API - PUBLIC CHAT & QUESTIONS
+# ==========================================
+
+@app.get("/api/questions")
+def get_active_questions(db: Session = Depends(get_db)):
+    questions = db.query(DefaultQuestion).filter(DefaultQuestion.is_active == True).order_by(DefaultQuestion.display_order).all()
+    return [{"id": q.id, "text": q.question_text} for q in questions]
 
 
 async def transcribe_with_whisper(webm_bytes: bytes) -> str:
@@ -175,7 +348,6 @@ async def transcribe_with_whisper(webm_bytes: bytes) -> str:
 # --- WebSocket Streaming ---
 
 client_cooldowns = {}
-session_nudge_counts = {}  # Tracks nudges sent per session: {client_id: count}
 session_connection_counts = {} # Tracks how many times a session has connected: {client_id: count}
 
 # --- Predefined Follow-Up Message Pools ---
@@ -245,9 +417,34 @@ async def generate_ai_followup(last_bot_message: str) -> str:
 
 
 @app.websocket("/ws/chat/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: str):
+async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Optional[str] = None):
     await websocket.accept()
-    logger.info(f"Client {client_id} connected")
+    
+    from database import SessionLocal, User
+    
+    # Auth Logic
+    current_user = None
+    if token and token != "null" and token != "undefined":
+        try:
+            from jose import jwt
+            from auth import SECRET_KEY, ALGORITHM
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            sub: str = payload.get("sub")
+            if sub:
+                db = SessionLocal()
+                # Try email then username
+                current_user = db.query(User).filter(User.email == sub).first()
+                if not current_user:
+                    current_user = db.query(User).filter(User.username == sub).first()
+                db.close()
+        except Exception as e:
+            logger.warning(f"WS Auth Failed: {e}")
+
+    # For logic/AI/logs we use "guest", but for DB we use current_user.id (which can be None)
+    user_id_for_ai = current_user.id if current_user else "guest"
+    db_user_id = current_user.id if current_user else None
+    
+    logger.info(f"Client {client_id} connected (User: {user_id_for_ai})")
 
     # Audio buffer: accumulates raw webm bytes from MediaRecorder chunks
     audio_buffer = bytearray()
@@ -259,19 +456,46 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
     interaction_started = False  # True once user sends first message
     session_ended = False
     last_activity_time = time.time()
+    last_typing_time = 0
+    is_client_active = True # Default to True, hook will update it immediately
 
     # --- Cold Start Routine ---
     async def cold_start_routine():
-        """If user opens chat but doesn't type for 45s, send exactly ONE nudge if session is empty."""
+        """If user opens chat but doesn't type for 15s, send exactly ONE nudge if session is empty."""
         try:
-            await asyncio.sleep(45)
+            await asyncio.sleep(15)
             # Only send if no interaction, no session end, and 0 nudges sent so far
-            if not interaction_started and not session_ended:
-                if session_nudge_counts.get(client_id, 0) == 0:
+            if not interaction_started and not session_ended and is_client_active:
+                db = SessionLocal()
+                session_obj = None
+                db_count = 0
+                
+                # Only check/write DB for logged in users
+                if db_user_id:
+                    session_obj = db.query(ChatSession).filter(ChatSession.id == client_id).first()
+                    db_count = session_obj.nudge_count if session_obj else 0
+                else:
+                    # For guests, we only use in-memory state
+                    # We assume 0 since if they refreshed, they get a new connection anyway
+                    db_count = 0
+                
+                if db_count == 0:
                     msg = random.choice(COLD_START_MESSAGES)
                     await websocket.send_json({"type": "response.text_new", "text": msg})
-                    session_nudge_counts[client_id] = 1
+                    
+                    if db_user_id:
+                        if not session_obj:
+                            session_obj = ChatSession(id=client_id, user_id=db_user_id)
+                            db.add(session_obj)
+                        
+                        session_obj.nudge_count = 1
+                        db.add(ChatMessage(session_id=client_id, role="assistant", content=msg))
+                        session_obj.last_message = msg
+                        session_obj.last_message_at = datetime.now(timezone.utc)
+                        db.commit()
+                    
                     logger.info(f"Persistent Cold Start nudge sent to {client_id}")
+                db.close()
         except asyncio.CancelledError:
             pass
 
@@ -280,12 +504,39 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         """Sends max 2 nudges after interaction. Checks global count to prevent refresh-spam."""
         nonlocal session_ended
         try:
+            # We track guest nudge count in memory
+            guest_nudge_count = 0
+            
             for _ in range(2):
                 await asyncio.sleep(90)
                 if session_ended: return
                 
-                count = session_nudge_counts.get(client_id, 0)
+                db = SessionLocal()
+                session_obj = None
+                count = 0
+                
+                if db_user_id:
+                    session_obj = db.query(ChatSession).filter(ChatSession.id == client_id).first()
+                    count = session_obj.nudge_count if session_obj else 0
+                else:
+                    count = guest_nudge_count
+
+                # --- Dynamic Idle Check ---
+                # Only send if:
+                # 1. Chat is actively open (is_client_active)
+                # 2. User is not currently typing (last 10s)
+                # 3. User has been idle for at least 80s since last activity
+                current_time = time.time()
+                is_idle = (current_time - last_activity_time) >= 80
+                is_typing_now = (current_time - last_typing_time) < 10
+
+                if not is_client_active or is_typing_now or not is_idle:
+                    logger.info(f"Nudge skipped for {client_id}: active={is_client_active}, typing={is_typing_now}, idle={is_idle}")
+                    # Re-queue the loop if we want to try again, but let's just skip this slot
+                    continue
+
                 if count >= 2: 
+                    db.close()
                     logger.info(f"Nudge limit (2) reached for {client_id}. Stopping.")
                     return
 
@@ -297,13 +548,25 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     msg = random.choice(FALLBACK_MESSAGES)
 
                 await websocket.send_json({"type": "response.text_new", "text": msg})
-                session_nudge_counts[client_id] = count + 1
-                logger.info(f"Follow-up nudge {count + 1} sent to {client_id}")
-
+                
+                if db_user_id:
+                    if not session_obj:
+                        session_obj = ChatSession(id=client_id, user_id=db_user_id)
+                        db.add(session_obj)
+                    session_obj.nudge_count = count + 1
+                    db.add(ChatMessage(session_id=client_id, role="assistant", content=msg))
+                    session_obj.last_message = msg
+                    session_obj.last_message_at = datetime.now(timezone.utc)
+                    db.commit()
+                else:
+                    guest_nudge_count += 1
+                    
+                db.close()
+                logger.info(f"Follow-up nudge sent to {client_id}")
         except asyncio.CancelledError:
             pass
 
-    # --- Hard Timeout (10 minutes of inactivity → close session silently) ---
+    # --- Hard Timeout (5 minutes of inactivity → close session silently) ---
     async def hard_timeout_routine():
         nonlocal session_ended
         try:
@@ -311,7 +574,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 await asyncio.sleep(10)
                 if session_ended: return
                 elapsed = time.time() - last_activity_time
-                if elapsed >= 600:  # 10 minutes
+                if elapsed >= 300:  # 5 minutes
                     logger.info(f"Hard timeout reached for {client_id} ({elapsed:.0f}s idle)")
                     session_ended = True
                     try:
@@ -349,16 +612,44 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
             hard_timeout_task.cancel()
         hard_timeout_task = None
         client_cooldowns.pop(client_id, None)
-        # Note: We do NOT pop session_nudge_counts or session_connection_counts, so they persist if the server stays up
+        # Note: We do NOT pop session_connection_counts, so it persists if the server stays up
 
     # Start cold start timer and hard timeout monitor
     # --- Initial State Sync ---
-    # Track connections for this specific session
-    conn_count = session_connection_counts.get(client_id, 0) + 1
-    session_connection_counts[client_id] = conn_count
-
     # Check if session has ANY history to determine if we should resume nudges
-    existing_session = await session_service.get_session(app_name="CryptoBackend", user_id="user", session_id=client_id)
+    db = SessionLocal()
+    session_obj = db.query(ChatSession).filter(ChatSession.id == client_id).first()
+    
+    # --- Check for 5-minute Timeout (Persistent) ---
+    if session_obj and session_obj.last_message_at:
+        elapsed = (datetime.now(timezone.utc) - session_obj.last_message_at.replace(tzinfo=timezone.utc)).total_seconds()
+        if elapsed >= 300:
+            logger.info(f"Session {client_id} resumed but is already timed out ({elapsed:.0f}s). Locking.")
+            session_ended = True
+            await websocket.send_json({"type": "session.end"})
+
+    db_nudge_count = session_obj.nudge_count if session_obj else 0
+    
+    # --- Fetch DB History ---
+    # Send existing messages to the frontend immediately on connect
+    history = db.query(ChatMessage).filter(ChatMessage.session_id == client_id).order_by(ChatMessage.created_at.asc()).all()
+    if history:
+        await websocket.send_json({
+            "type": "history",
+            "messages": [
+                {
+                    "id": msg.id,
+                    "role": msg.role,
+                    "content": msg.content,
+                    "created_at": msg.created_at.replace(tzinfo=timezone.utc).isoformat() if msg.created_at else None
+                } for msg in history
+            ]
+        })
+        logger.info(f"Sent {len(history)} messages of history to {client_id}")
+    
+    db.close()
+
+    existing_session = await session_service.get_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
     history_found = existing_session and hasattr(existing_session, 'messages') and len(existing_session.messages) > 0
 
     if history_found:
@@ -376,17 +667,17 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                 if last_bot_msg: break
         
         # If the last message was from the bot and we haven't reached the nudge limit, resume the routine
-        if last_bot_msg and session_nudge_counts.get(client_id, 0) < 2:
+        if last_bot_msg and db_nudge_count < 2:
             followup_task = asyncio.create_task(follow_up_routine(last_bot_msg))
-            logger.info(f"Resumed follow-up routine for {client_id}")
+            logger.info(f"Resumed follow-up routine for {client_id} (DB Count: {db_nudge_count})")
     else:
-        # No history found. Skip cold-start if this is a refresh (conn > 1)
-        if conn_count > 1:
-            interaction_started = True
-            logger.info(f"Skipping cold-start for fresh refresh on {client_id}")
-        else:
+        # No history found. Start cold-start if no nudge has been sent yet
+        if db_nudge_count == 0:
             cold_start_task = asyncio.create_task(cold_start_routine())
             logger.info(f"Started one-shot cold-start timer for {client_id}")
+        else:
+            interaction_started = True
+            logger.info(f"Cold-start already sent for {client_id}, waiting for user.")
     
     hard_timeout_task = asyncio.create_task(hard_timeout_routine())
 
@@ -431,14 +722,12 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                     cancel_followup()
                     cancel_cold_start()
                     interaction_started = True
-                    session_nudge_counts[client_id] = 0
                     continue
 
                 elif msg_type == "text_input":
                     cancel_followup()
                     cancel_cold_start()
                     interaction_started = True
-                    session_nudge_counts[client_id] = 0
                     user_text = data.get("text", "").strip()
                     if not user_text:
                         continue
@@ -448,22 +737,47 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
                     # Agent Processing
                     response_text = ""
+                    
+                    # Ensure session exists in DB
+                    if db_user_id:
+                        db = SessionLocal()
+                        db_session = db.query(ChatSession).filter(ChatSession.id == client_id).first()
+                        if not db_session:
+                            db_session = ChatSession(id=client_id, user_id=db_user_id, title=user_text[:50])
+                            db.add(db_session)
+                        
+                        # Save user message to DB
+                        user_msg = ChatMessage(session_id=client_id, role="user", content=user_text)
+                        db.add(user_msg)
+                        db_session.last_message = user_text
+                        db_session.last_message_at = datetime.now(timezone.utc)
+                        db_session.user_id = db_user_id # Ensure it's updated if they just logged in
+                        db.commit()
+                        db.close()
+
                     session = await session_service.get_session(
-                        app_name="CryptoBackend", user_id="user", session_id=client_id
+                        app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id
                     )
                     if not session:
                         await session_service.create_session(
-                            app_name="CryptoBackend", user_id="user", session_id=client_id
+                            app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id
                         )
 
                     # --- Agent Execution with Smart Retry Logic ---
                     max_retries = 3
+                    
+                    async def safe_send(data):
+                        try:
+                            await websocket.send_json(data)
+                        except Exception:
+                            pass
+
                     try:
                         for attempt in range(1, max_retries + 1):
                             try:
                                 logger.info(f"Running agent for {client_id} (attempt {attempt})...")
                                 async for event in runner.run_async(
-                                    user_id="user",
+                                    user_id=user_id_for_ai,
                                     session_id=client_id,
                                     new_message=types.Content(role="user", parts=[types.Part(text=user_text)])
                                 ):
@@ -480,14 +794,26 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
                                     if chunk_text:
                                         response_text += chunk_text
-                                        await websocket.send_json({"type": "response.text_partial", "text": chunk_text})
+                                        await safe_send({"type": "response.text_partial", "text": chunk_text})
 
                                 logger.info(f"Agent reply complete: {len(response_text)} chars.")
                                 if not response_text.strip():
                                     response_text = "I'm sorry, I couldn't process that. Please try again."
-                                    await websocket.send_json({"type": "response.text_partial", "text": response_text})
-                                await websocket.send_json({"type": "response.text", "text": response_text})
+                                    await safe_send({"type": "response.text_partial", "text": response_text})
+                                await safe_send({"type": "response.text", "text": response_text})
                                 
+                                # Save Bot response to DB
+                                if db_user_id:
+                                    db = SessionLocal()
+                                    bot_msg = ChatMessage(session_id=client_id, role="bot", content=response_text)
+                                    db.add(bot_msg)
+                                    db_session = db.query(ChatSession).filter(ChatSession.id == client_id).first()
+                                    if db_session:
+                                        db_session.last_message = response_text
+                                        db_session.last_message_at = datetime.now(timezone.utc)
+                                    db.commit()
+                                    db.close()
+
                                 # Start follow-up timer for the 2-nudge sequence
                                 if not session_ended:
                                     cancel_followup()
@@ -503,7 +829,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
                                     response_text = ""
                                 else:
                                     logger.error(f"❌ MCP server unreachable after {max_retries} attempts.")
-                                    await websocket.send_json({
+                                    await safe_send({
                                         "type": "error",
                                         "message": "Our analysis engine is temporarily unavailable. Please try again in a moment."
                                     })
@@ -516,16 +842,16 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
 
                                 if is_429:
                                     logger.error(f"❌ Gemini Quota Exceeded (429): {err_msg}")
-                                    await websocket.send_json({"type": "error", "message": "I've hit my daily limit for analysis. Please try again tomorrow or upgrade your Gemini API key plan."})
+                                    await safe_send({"type": "error", "message": "I've hit my daily limit for analysis. Please try again tomorrow or upgrade your Gemini API key plan."})
                                     break
                                 elif is_401:
                                     logger.error(f"❌ Gemini API Key Error (401): {err_msg}")
-                                    await websocket.send_json({"type": "error", "message": "My API key seems to be invalid. Please check the .env file and ensure your Google AI Studio key is correct."})
+                                    await safe_send({"type": "error", "message": "My API key seems to be invalid. Please check the .env file and ensure your Google AI Studio key is correct."})
                                     break
                                 elif is_503 and attempt < max_retries:
                                     wait_time = attempt * 5
                                     logger.warning(f"⚠️ Gemini 503 overloaded (attempt {attempt}/{max_retries}). Retrying in {wait_time}s...")
-                                    await websocket.send_json({"type": "response.text_partial", "text": f"_The AI model is busy. Retrying in {wait_time} seconds..._"})
+                                    await safe_send({"type": "response.text_partial", "text": f"_The AI model is busy. Retrying in {wait_time} seconds..._"})
                                     await asyncio.sleep(wait_time)
                                     response_text = ""
                                 elif is_503:
@@ -564,6 +890,216 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str):
         logger.error(f"Unexpected error for {client_id}: {e}", exc_info=True)
 
 
+# ==========================================
+# REST API - ADMIN MONITORING
+# ==========================================
+
+@app.post("/api/admin/login")
+def admin_login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    # Check Master Admin from .env
+    master_username = os.getenv("ADMIN_USERNAME", "admin")
+    master_password = os.getenv("ADMIN_PASSWORD", "admin123")
+    
+    if form_data.username == master_username and form_data.password == master_password:
+        access_token = create_access_token(data={"sub": master_username, "is_admin": True})
+        return {"access_token": access_token, "token_type": "bearer"}
+
+    # Check DB Admin
+    admin = db.query(AdminUser).filter(AdminUser.username == form_data.username).first()
+    if not admin or not verify_password(form_data.password, admin.password_hash):
+        raise HTTPException(status_code=400, detail="Incorrect admin username or password")
+    
+    access_token = create_access_token(data={"sub": admin.username, "is_admin": True})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.get("/api/admin/stats")
+def get_admin_stats(db: Session = Depends(get_db), current_admin: AdminUser = Depends(get_current_admin)):
+    total_users = db.query(User).filter(User.is_guest == False).count()
+    total_sessions = db.query(ChatSession).filter(ChatSession.user_id.isnot(None)).count()
+    total_messages = db.query(ChatMessage).join(ChatSession).filter(ChatSession.user_id.isnot(None)).count()
+    total_documents = db.query(Document).count()
+    return {
+        "total_users": total_users,
+        "total_sessions": total_sessions,
+        "total_messages": total_messages,
+        "total_documents": total_documents 
+    }
+
+@app.get("/api/admin/users")
+def get_all_users(db: Session = Depends(get_db), current_admin: AdminUser = Depends(get_current_admin)):
+    users = db.query(User).order_by(User.id.desc()).all()
+    return [
+        {
+            "id": u.id,
+            "email": u.email,
+            "username": u.username,
+            "display_name": u.display_name,
+            "role": "user",
+            "is_guest": u.is_guest
+        } for u in users
+    ]
+
+@app.get("/api/admin/sessions")
+def get_all_sessions(db: Session = Depends(get_db), current_admin: AdminUser = Depends(get_current_admin)):
+    # Simple list of all sessions with user info
+    sessions = db.query(ChatSession).filter(ChatSession.user_id.isnot(None)).order_by(ChatSession.updated_at.desc()).all()
+    return [
+        {
+            "id": s.id,
+            "title": s.title,
+            "user": {
+                "id": s.user.id if s.user else "Unknown",
+                "email": s.user.email if s.user else "Unknown",
+                "username": s.user.username if s.user else "Guest",
+                "is_guest": s.user.is_guest if s.user else True
+            },
+            "last_message": s.last_message,
+            "updated_at": s.updated_at.replace(tzinfo=timezone.utc).isoformat() if s.updated_at else None
+        } for s in sessions
+    ]
+
+@app.get("/api/admin/sessions/{session_id}/messages")
+def get_session_messages(session_id: str, db: Session = Depends(get_db), current_admin: AdminUser = Depends(get_current_admin)):
+    session = db.query(ChatSession).filter(ChatSession.id == session_id, ChatSession.user_id.isnot(None)).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found or is a guest session")
+        
+    messages = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.asc()).all()
+    return [
+        {
+            "role": m.role,
+            "content": m.content,
+            "created_at": m.created_at.replace(tzinfo=timezone.utc).isoformat() if m.created_at else None
+        } for m in messages
+    ]
+
+# Admin Documents
+@app.post("/api/admin/documents")
+async def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db), current_admin: AdminUser = Depends(get_current_admin)):
+    import shutil
+    import os
+    
+    try:
+        os.makedirs("./data", exist_ok=True)
+        file_path = f"./data/{file.filename}"
+        
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        logger.info(f"Admin: Uploading document {file.filename}...")
+        
+        # Trigger single-file RAG processing (Optimized)
+        rag_service.ingest_file(file_path)
+        
+        # Save metadata to DB
+        doc = Document(
+            file_name=file.filename,
+            source="upload",
+            status="processed"
+        )
+        db.add(doc)
+        db.commit()
+        logger.info(f"Admin: Document {file.filename} indexed and tracked successfully.")
+        return {"message": "Document uploaded and processed successfully"}
+    except Exception as e:
+        logger.error(f"Upload failed: {e}", exc_info=True)
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+
+@app.get("/api/admin/documents")
+def get_admin_documents(db: Session = Depends(get_db), current_admin: AdminUser = Depends(get_current_admin)):
+    # Sync filesystem with DB first
+    sync_rag_documents(db)
+    
+    docs = db.query(Document).order_by(Document.created_at.desc()).all()
+    return [
+        {
+            "id": d.id,
+            "file_name": d.file_name,
+            "source": d.source,
+            "status": d.status,
+            "created_at": d.created_at.replace(tzinfo=timezone.utc).isoformat() if d.created_at else None
+        } for d in docs
+    ]
+
+@app.delete("/api/admin/documents/{doc_id}")
+def delete_admin_document(doc_id: int, db: Session = Depends(get_db), current_admin: AdminUser = Depends(get_current_admin)):
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # 1. Delete from ChromaDB
+    rag_service.delete_document(doc.file_name)
+    
+    # 2. Delete from Filesystem
+    file_path = f"./data/{doc.file_name}"
+    if os.path.exists(file_path):
+        try:
+            os.remove(file_path)
+        except Exception as e:
+            logger.error(f"Failed to delete file {file_path}: {e}")
+    
+    # 3. Delete from DB
+    db.delete(doc)
+    db.commit()
+    
+    return {"message": "Document deleted successfully"}
+
+# Admin Questions Management
+class QuestionCreate(BaseModel):
+    question_text: str
+    display_order: int = 0
+    is_active: bool = True
+
+@app.post("/api/admin/questions")
+def create_question(q: QuestionCreate, db: Session = Depends(get_db), current_admin: AdminUser = Depends(get_current_admin)):
+    new_q = DefaultQuestion(
+        question_text=q.question_text,
+        display_order=q.display_order,
+        is_active=q.is_active
+    )
+    db.add(new_q)
+    db.commit()
+    db.refresh(new_q)
+    return new_q
+
+@app.put("/api/admin/questions/{q_id}")
+def update_question(q_id: str, q: QuestionCreate, db: Session = Depends(get_db), current_admin: AdminUser = Depends(get_current_admin)):
+    db_q = db.query(DefaultQuestion).filter(DefaultQuestion.id == q_id).first()
+    if not db_q:
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    db_q.question_text = q.question_text
+    db_q.display_order = q.display_order
+    db_q.is_active = q.is_active
+    db.commit()
+    return db_q
+
+@app.delete("/api/admin/questions/{q_id}")
+def delete_question(q_id: str, db: Session = Depends(get_db), current_admin: AdminUser = Depends(get_current_admin)):
+    db_q = db.query(DefaultQuestion).filter(DefaultQuestion.id == q_id).first()
+    if not db_q:
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    db.delete(db_q)
+    db.commit()
+    return {"message": "Question deleted"}
+
+@app.get("/api/admin/me")
+def get_admin_me(current_admin: AdminUser = Depends(get_current_admin)):
+    return {
+        "id": current_admin.id,
+        "username": current_admin.username,
+        "display_name": current_admin.display_name,
+        "role": "admin"
+    }
+
+# --- Public / Chatbot UI Endpoints ---
+# (Using /api/questions for active default questions)
+
 if __name__ == "__main__":
+    from database import engine, Base
+    logger.info("Initializing database tables...")
+    Base.metadata.create_all(bind=engine)
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
 
