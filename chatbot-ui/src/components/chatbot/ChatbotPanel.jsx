@@ -48,11 +48,11 @@ const ChatbotPanel = () => {
 
     // ── Session ID ──────────────────────────────────────────────────────────
     /**
-     * GUEST:  Always a new random ID (ephemeral, never persisted).
+     * GUEST:  No session ID (cannot chat).
      * USER:   Resumed from localStorage, or a new one created and saved.
      */
     const [activeSessionId, setActiveSessionId] = useState(() => {
-        if (isGuest) return newSessionId();
+        if (isGuest) return null;
         const saved = localStorage.getItem(`${userPrefix}_last_session`);
         if (saved) return saved;
         const id = newSessionId();
@@ -261,7 +261,32 @@ const ChatbotPanel = () => {
         <div className="flex flex-col w-full h-full bg-white/60 backdrop-blur-md md:rounded-3xl shadow-2xl border border-indigo-100 overflow-hidden relative">
 
 
-            {showHistory ? (
+            {isGuest ? (
+                /* ── GUEST / LOGIN PROMPT ── */
+                <div className="flex-1 flex flex-col items-center justify-center p-12 text-center bg-slate-50/40">
+                    <div className="w-20 h-20 bg-indigo-500/10 rounded-3xl flex items-center justify-center text-indigo-500 mb-6">
+                        <MessageCircle size={40} />
+                    </div>
+                    <h2 className="text-2xl font-bold text-slate-800 mb-3">Welcome to CryptoBot</h2>
+                    <p className="text-slate-500 mb-8 max-w-sm mx-auto leading-relaxed">
+                        Join our community to start chatting with the AI, track your portfolio, and explore real-time crypto analytics.
+                    </p>
+                    <div className="flex flex-col w-full max-w-xs gap-3">
+                        <button 
+                            onClick={() => window.location.href = '/login'}
+                            className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-indigo-600/20 hover:bg-indigo-500 transition-all active:scale-95"
+                        >
+                            Log In to Chat
+                        </button>
+                        <button 
+                            onClick={() => window.location.href = '/register'}
+                            className="w-full bg-white border border-indigo-100 text-indigo-600 py-4 rounded-2xl font-bold hover:bg-indigo-50 transition-all active:scale-95"
+                        >
+                            Create Account
+                        </button>
+                    </div>
+                </div>
+            ) : showHistory ? (
                 /* ── HISTORY LIST VIEW ── */
                 <div className="flex flex-col w-full h-full bg-slate-50/40 backdrop-blur-md">
                     <div className="flex items-center justify-between p-6 border-b border-indigo-50 bg-white/40">

@@ -29,11 +29,13 @@ const AdminUsers = () => {
         fetchUsers();
     }, [token]);
 
-    const filteredUsers = users.filter(user => 
-        (user.email?.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (user.username?.toLowerCase().includes(searchQuery.toLowerCase())) ||
-        (user.display_name?.toLowerCase().includes(searchQuery.toLowerCase()))
-    );
+    const filteredUsers = users
+        .filter(user => !user.is_guest) // Exclude guests
+        .filter(user => 
+            (user.email?.toLowerCase().includes(searchQuery.toLowerCase())) ||
+            (user.username?.toLowerCase().includes(searchQuery.toLowerCase())) ||
+            (user.display_name?.toLowerCase().includes(searchQuery.toLowerCase()))
+        );
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">

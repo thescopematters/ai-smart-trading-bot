@@ -7,7 +7,10 @@ import {
     TrendingUp, 
     Clock,
     UserPlus,
-    Activity
+    Activity,
+    Eye,
+    EyeOff,
+    RefreshCcw
 } from 'lucide-react';
 import { useAdminAuth } from '../../context/AdminAuthContext';
 
@@ -19,6 +22,14 @@ const AdminDashboard = () => {
         total_documents: 0
     });
     const [loading, setLoading] = useState(true);
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [creating, setCreating] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
+    const [formData, setFormData] = useState({
+        username: '',
+        password: '',
+        display_name: ''
+    });
     const { token } = useAdminAuth();
 
     useEffect(() => {
@@ -39,6 +50,33 @@ const AdminDashboard = () => {
         };
         fetchStats();
     }, [token]);
+
+    const handleCreateAdmin = async (e) => {
+        e.preventDefault();
+        setCreating(true);
+        try {
+            const response = await fetch('http://localhost:8000/api/admin/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(formData)
+            });
+            const result = await response.json();
+            if (response.ok) {
+                alert("Admin created successfully!");
+                setIsModalOpen(false);
+                setFormData({ username: '', password: '', display_name: '' });
+            } else {
+                alert(result.detail || "Failed to create admin");
+            }
+        } catch (error) {
+            alert("Error: " + error.message);
+        } finally {
+            setCreating(false);
+        }
+    };
 
     const statCards = [
         { label: 'Total Users', value: stats.total_users, icon: Users, color: 'bg-indigo-500', trend: '+12%' },
@@ -120,11 +158,15 @@ const AdminDashboard = () => {
                     
                     <div className="space-y-4">
                         {[
-                            { label: 'Create New Admin', icon: UserPlus },
+                            { label: 'Create New Admin', icon: UserPlus, onClick: () => setIsModalOpen(true) },
                             { label: 'Upload Data', icon: FileText },
                             { label: 'View Logs', icon: Clock },
                         ].map((action, idx) => (
-                            <button key={idx} className="w-full flex items-center gap-3 bg-sidebar-active/50 hover:bg-sidebar-active p-3 rounded-xl transition-all font-semibold text-sm border border-border-light text-text-primary">
+                            <button 
+                                key={idx} 
+                                onClick={action.onClick}
+                                className="w-full flex items-center gap-3 bg-sidebar-active/50 hover:bg-sidebar-active p-3 rounded-xl transition-all font-semibold text-sm border border-border-light text-text-primary"
+                            >
                                 <action.icon size={18} className="text-primary-purple" />
                                 {action.label}
                             </button>
@@ -132,6 +174,85 @@ const AdminDashboard = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Create Admin Modal */}
+            {isModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="bg-white rounded-3xl p-8 w-full max-w-md shadow-2xl border border-border-light animate-in zoom-in-95 duration-300">
+                        <div className="flex items-center justify-between mb-6">
+                            <h2 className="text-xl font-bold text-text-primary flex items-center gap-2">
+                                <UserPlus className="text-primary-purple" />
+                                Create New Admin
+                            </h2>
+                            <button onClick={() => setIsModalOpen(false)} className="text-text-muted hover:text-text-primary">
+                                <Activity size={20} className="rotate-45" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleCreateAdmin} className="space-y-4">
+                            <div>
+                                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5 ml-1">Username</label>
+                                <input 
+                                    type="text" 
+                                    required
+                                    value={formData.username}
+                                    onChange={(e) => setFormData({...formData, username: e.target.value})}
+                                    className="w-full bg-slate-50 border border-border-light rounded-xl px-4 py-3 text-sm text-text-primary focus:outline-none focus:border-primary-purple/50 transition-all"
+                                    placeholder="e.g. ritesh_admin"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5 ml-1">Display Name</label>
+                                <input 
+                                    type="text" 
+                                    value={formData.display_name}
+                                    onChange={(e) => setFormData({...formData, display_name: e.target.value})}
+                                    className="w-full bg-slate-50 border border-border-light rounded-xl px-4 py-3 text-sm text-text-primary focus:outline-none focus:border-primary-purple/50 transition-all"
+                                    placeholder="e.g. Ritesh"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-bold text-text-muted uppercase tracking-wider mb-1.5 ml-1">Password</label>
+                                <div className="relative">
+                                    <input 
+                                        type={showPassword ? "text" : "password"} 
+                                        required
+                                        value={formData.password}
+                                        onChange={(e) => setFormData({...formData, password: e.target.value})}
+                                        className="w-full bg-slate-50 border border-border-light rounded-xl px-4 py-3 text-sm text-text-primary focus:outline-none focus:border-primary-purple/50 transition-all pr-12"
+                                        placeholder="••••••••"
+                                    />
+                                    <button 
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted hover:text-text-primary p-1.5 transition-colors"
+                                    >
+                                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="pt-4 flex gap-3">
+                                <button 
+                                    type="button"
+                                    onClick={() => setIsModalOpen(false)}
+                                    className="flex-1 py-3 rounded-xl font-bold text-sm text-text-secondary hover:bg-slate-100 transition-all"
+                                >
+                                    Cancel
+                                </button>
+                                <button 
+                                    type="submit"
+                                    disabled={creating}
+                                    className="flex-[2] bg-primary-purple text-white py-3 rounded-xl font-bold text-sm shadow-lg shadow-primary-purple/20 hover:opacity-90 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                >
+                                    {creating ? <RefreshCcw size={16} className="animate-spin" /> : null}
+                                    {creating ? 'Creating...' : 'Create Admin'}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

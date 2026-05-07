@@ -1,11 +1,11 @@
 import os
 from dotenv import load_dotenv
-from database import Base, engine, SessionLocal, User, DefaultQuestion
+from database import Base, engine, SessionLocal, User, AdminUser, DefaultQuestion
 from auth import get_password_hash
 
 load_dotenv()
 
-def setup_database():
+def setup_database(): 
     print("Creating tables...")
     Base.metadata.create_all(bind=engine)
     
@@ -16,35 +16,18 @@ def setup_database():
         admin_pass = os.getenv("ADMIN_PASSWORD")
         admin_email = os.getenv("ADMIN_EMAIL")
         
-        existing_admin = db.query(User).filter(User.username == admin_user).first()
+        existing_admin = db.query(AdminUser).filter(AdminUser.username == admin_user).first()
         if not existing_admin:
             print(f"Seeding admin user: {admin_user}")
-            admin = User(
-                email=admin_email,
+            admin = AdminUser(
                 username=admin_user,
                 password_hash=get_password_hash(admin_pass),
-                display_name="System Admin",
-                role="admin",
-                is_guest=False
+                display_name="System Admin"
             )
             db.add(admin)
             db.commit()
         else:
             print("Admin user already exists.")
-
-        # Seed guest user if empty
-        existing_guest = db.query(User).filter(User.id == "guest").first()
-        if not existing_guest:
-            print("Seeding guest user...")
-            guest = User(
-                id="guest",
-                username="guest_user",
-                display_name="Guest User",
-                role="user",
-                is_guest=True
-            )
-            db.add(guest)
-            db.commit()
 
         # Seed default questions if empty
         if db.query(DefaultQuestion).count() == 0:
@@ -62,22 +45,9 @@ def setup_database():
             db.commit()
 
         # --- Seed Trading Data (Optional) ---
-        from database import Coin, PaperWallet, Balance
-        if db.query(Coin).count() == 0:
-            print("Seeding initial coins...")
-            btc = Coin(name="Bitcoin", symbol="BTC", price="65000.00")
-            eth = Coin(name="Ethereum", symbol="ETH", price="3500.00")
-            db.add_all([btc, eth])
-            db.commit()
-
-            # Give Guest some initial money
-            if not db.query(PaperWallet).filter(PaperWallet.user_id == "guest").first():
-                wallet = PaperWallet(user_id="guest", cash_balance="100000.00", initial_balance="100000.00")
-                db.add(wallet)
-                # Give some initial BTC balance
-                bal = Balance(user_id="guest", coin_id=btc.id, balance="1.5")
-                db.add(bal)
-                db.commit()
+        # Seed logic for users can be added here if needed in the future
+        
+        print("Database setup complete.")
         
         print("Database setup complete.")
     finally:

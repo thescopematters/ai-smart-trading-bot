@@ -153,6 +153,11 @@ class RegisterRequest(BaseModel):
     display_name: str = ""
     client_id: Optional[str] = None
 
+class AdminCreateRequest(BaseModel):
+    username: str
+    password: str
+    display_name: str = ""
+
 @app.post("/api/auth/register")
 @limiter.limit("5/minute")
 def register(request: Request, data: RegisterRequest, db: Session = Depends(get_db)):
@@ -259,7 +264,7 @@ def delete_session(session_id: str, db: Session = Depends(get_db), current_user:
 
 @app.get("/api/questions")
 def get_active_questions(db: Session = Depends(get_db)):
-    questions = db.query(DefaultQuestion).filter(DefaultQuestion.is_active == True).order_by(DefaultQuestion.display_order).all()
+    questions = db.query(DefaultQuestion).filter(DefaultQuestion.is_active == True).order_by(DefaultQuestion.created_at.desc()).all()
     return [{"id": q.id, "text": q.question_text} for q in questions]
 
 
@@ -440,9 +445,15 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
         except Exception as e:
             logger.warning(f"WS Auth Failed: {e}")
 
-    # For logic/AI/logs we use "guest", but for DB we use current_user.id (which can be None)
-    user_id_for_ai = current_user.id if current_user else "guest"
-    db_user_id = current_user.id if current_user else None
+    # Enforce Authentication: No Guest Fallback
+    if not current_user:
+        logger.warning(f"Rejecting unauthenticated WS connection from {client_id}")
+        await websocket.send_json({"type": "error", "message": "Authentication required. Please login."})
+        await websocket.close(code=4003)
+        return
+
+    user_id_for_ai = current_user.id
+    db_user_id = current_user.id
     
     logger.info(f"Client {client_id} connected (User: {user_id_for_ai})")
 
@@ -912,6 +923,23 @@ def admin_login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     access_token = create_access_token(data={"sub": admin.username, "is_admin": True})
     return {"access_token": access_token, "token_type": "bearer"}
 
+@app.post("/api/admin/create")
+def create_admin(data: AdminCreateRequest, db: Session = Depends(get_db), current_admin: AdminUser = Depends(get_current_admin)):
+    # Check if username exists
+    if db.query(AdminUser).filter(AdminUser.username == data.username).first():
+        raise HTTPException(status_code=400, detail="Admin username already exists")
+    
+    new_admin = AdminUser(
+        username=data.username,
+        password_hash=get_password_hash(data.password),
+        display_name=data.display_name or data.username
+    )
+    db.add(new_admin)
+    db.commit()
+    db.refresh(new_admin)
+    
+    return {"message": "Admin created successfully", "username": new_admin.username}
+
 @app.get("/api/admin/stats")
 def get_admin_stats(db: Session = Depends(get_db), current_admin: AdminUser = Depends(get_current_admin)):
     total_users = db.query(User).filter(User.is_guest == False).count()
@@ -927,7 +955,7 @@ def get_admin_stats(db: Session = Depends(get_db), current_admin: AdminUser = De
 
 @app.get("/api/admin/users")
 def get_all_users(db: Session = Depends(get_db), current_admin: AdminUser = Depends(get_current_admin)):
-    users = db.query(User).order_by(User.id.desc()).all()
+    users = db.query(User).order_by(User.created_at.desc()).all()
     return [
         {
             "id": u.id,
