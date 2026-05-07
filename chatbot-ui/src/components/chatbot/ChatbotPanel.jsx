@@ -438,7 +438,7 @@ const ActiveChat = ({ chatControls, defaultQuestions, onOpenHistory, showHistory
                                         <button
                                             key={q.id || i}
                                             onClick={() => sendMessage(q.text)}
-                                            className="text-left text-xs bg-white hover:bg-white/80 border border-white/60 hover:border-violet-200 text-slate-600 hover:text-violet-600 p-4 rounded-xl transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5 animate-in fade-in zoom-in-95 duration-500"
+                                            className="text-left text-xs bg-white hover:bg-white/80 border border-white/60 hover:border-violet-200 text-slate-600 hover:text-violet-600 p-4 rounded-xl transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5 animate-in fade-in zoom-in-95"
                                             style={{ animationDelay: `${i * 100}ms` }}
                                         >
                                             {q.text}
