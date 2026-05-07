@@ -1,39 +1,36 @@
 """
-MCP TRADING SERVER
-------------------
-Handles Paper Trading tools for the AI Agent.
-Tools:
-  1. get_quote     - Get current price + fee estimate before placing order
-  2. place_order   - Place Market or Limit order (BUY/SELL)
+TRADING REST API ROUTES
+-----------------------
+Two endpoints for the Chatbot UI:
+  POST /api/v1/get_quote
+  POST /api/v1/place_order
 """
 
-from fastmcp import FastMCP
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
+from typing import Optional
+from sqlalchemy.orm import Session
+from decimal import Decimal, ROUND_HALF_UP
+import requests
 import os
 import logging
-import requests
-from decimal import Decimal, ROUND_HALF_UP
 from dotenv import load_dotenv
 
+from database import get_db, PaperWallet, PaperPosition, PaperOrder, PaperTrade
+from auth import get_current_user
+from database import User
+
 load_dotenv()
+logger = logging.getLogger("TradingRoutes")
 
-mcp = FastMCP("Crypto-Trading")
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("MCPTradingServer")
+router = APIRouter(prefix="/api/v1", tags=["Trading"])
 
 CMC_API_KEY = os.getenv("COINMARKETCAP_API_KEY", "")
-FEE_RATE = Decimal("0.001")  # 0.1% fee
+FEE_RATE = Decimal("0.001")  # 0.1%
 
-try:
-    from database import SessionLocal, PaperWallet, PaperPosition, PaperOrder, PaperTrade
-except ImportError:
-    logger.error("database.py not found.")
-    SessionLocal = None
-
-DEFAULT_USER_ID = "eceee63a-c1fa-48de-aa15-b75fcfd79809"
 
 # ---------------------------------------------------------
-# Helper: Get Live Price from CoinMarketCap
+# Helper: Fetch Live Price
 # ---------------------------------------------------------
 def fetch_live_price(symbol: str) -> Decimal:
     url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
@@ -46,46 +43,65 @@ def fetch_live_price(symbol: str) -> Decimal:
 
 
 # ---------------------------------------------------------
-# Tool 1: get_quote
+# Request Models
 # ---------------------------------------------------------
-@mcp.tool()
-def get_quote(symbol: str, quantity: float, side: str, user_id: str = DEFAULT_USER_ID) -> dict:
-    """
-    Get a price quote before placing an order.
-    Shows current price, estimated total cost, and fees.
+class QuoteRequest(BaseModel):
+    symbol: str
+    quantity: float
+    side: str  # BUY or SELL
 
-    Args:
-        symbol:   Crypto symbol e.g. BTC, ETH
-        quantity: Amount to buy/sell e.g. 0.01
-        side:     BUY or SELL
-        user_id:  User ID
+
+class OrderRequest(BaseModel):
+    symbol: str
+    quantity: float
+    side: str         # BUY or SELL
+    order_type: str   # MARKET or LIMIT
+    limit_price: Optional[float] = None
+
+
+# ---------------------------------------------------------
+# POST /api/v1/get_quote
+# ---------------------------------------------------------
+@router.post("/get_quote")
+def get_quote(
+    req: QuoteRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Get price quote before placing an order.
+    Returns current price, fee, total cost, and wallet balance check.
     """
     try:
-        symbol = symbol.upper()
-        side = side.upper()
-        qty = Decimal(str(quantity))
+        symbol = req.symbol.upper()
+        side = req.side.upper()
+        qty = Decimal(str(req.quantity))
+
+        # Validate side
+        if side not in ["BUY", "SELL"]:
+            raise HTTPException(status_code=400, detail="side must be BUY or SELL")
 
         # Get live price
         price = fetch_live_price(symbol)
 
-        # Calculate cost and fee
+        # Calculate costs
         gross_cost = (price * qty).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         fee = (gross_cost * FEE_RATE).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-        total = (gross_cost + fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        total_cost = (gross_cost + fee).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
-        # Check wallet balance for BUY
-        wallet_info = ""
-        if SessionLocal:
-            db = SessionLocal()
-            wallet = db.query(PaperWallet).filter(PaperWallet.user_id == user_id).first()
-            if wallet:
-                balance = Decimal(wallet.cash_balance)
-                if side == "BUY":
-                    if balance < total:
-                        wallet_info = f"⚠️ Insufficient balance. You have ${balance:.2f} but need ${total:.2f}"
-                    else:
-                        wallet_info = f"✅ Balance after order: ${(balance - total):.2f}"
-            db.close()
+        # Check wallet
+        wallet = db.query(PaperWallet).filter(
+            PaperWallet.user_id == current_user.id
+        ).first()
+
+        wallet_info = {}
+        if wallet:
+            balance = Decimal(wallet.cash_balance)
+            wallet_info = {
+                "current_balance": float(balance),
+                "sufficient": balance >= total_cost if side == "BUY" else True,
+                "balance_after": float((balance - total_cost).quantize(Decimal("0.01"))) if side == "BUY" else None
+            }
 
         return {
             "symbol": symbol,
@@ -94,58 +110,53 @@ def get_quote(symbol: str, quantity: float, side: str, user_id: str = DEFAULT_US
             "current_price": float(price),
             "gross_cost": float(gross_cost),
             "fee": float(fee),
-            "total_cost": float(total),
             "fee_rate": "0.1%",
-            "wallet_info": wallet_info,
-            "message": f"Quote ready. Confirm to place {side} order for {qty} {symbol} at ${price:,.2f}"
+            "total_cost": float(total_cost),
+            "wallet": wallet_info
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"get_quote error: {e}")
-        return {"error": str(e)}
+        logger.error(f"get_quote error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---------------------------------------------------------
-# Tool 2: place_order
+# POST /api/v1/place_order
 # ---------------------------------------------------------
-@mcp.tool()
+@router.post("/place_order")
 def place_order(
-    symbol: str,
-    quantity: float,
-    side: str,
-    order_type: str,
-    limit_price: float = None,
-    user_id: str = DEFAULT_USER_ID
-) -> dict:
+    req: OrderRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
     """
-    Place a paper trading order (Market or Limit).
-
-    Args:
-        symbol:      Crypto symbol e.g. BTC, ETH
-        quantity:    Amount to buy/sell
-        side:        BUY or SELL
-        order_type:  MARKET or LIMIT
-        limit_price: Required if order_type is LIMIT
-        user_id:     User ID
+    Place a Market or Limit paper trading order.
     """
-    if not SessionLocal:
-        return {"error": "Database not available"}
-
     try:
-        symbol = symbol.upper()
-        side = side.upper()
-        order_type = order_type.upper()
-        qty = Decimal(str(quantity))
+        symbol = req.symbol.upper()
+        side = req.side.upper()
+        order_type = req.order_type.upper()
+        qty = Decimal(str(req.quantity))
 
-        db = SessionLocal()
+        # Validations
+        if side not in ["BUY", "SELL"]:
+            raise HTTPException(status_code=400, detail="side must be BUY or SELL")
+        if order_type not in ["MARKET", "LIMIT"]:
+            raise HTTPException(status_code=400, detail="order_type must be MARKET or LIMIT")
+        if order_type == "LIMIT" and not req.limit_price:
+            raise HTTPException(status_code=400, detail="limit_price is required for LIMIT orders")
 
-        # Get or create wallet
-        wallet = db.query(PaperWallet).filter(PaperWallet.user_id == user_id).first()
+        # Get wallet
+        wallet = db.query(PaperWallet).filter(
+            PaperWallet.user_id == current_user.id
+        ).first()
         if not wallet:
-            db.close()
-            return {"error": "Wallet not found. Please contact support."}
+            raise HTTPException(status_code=404, detail="Wallet not found")
 
         cash_balance = Decimal(wallet.cash_balance)
+        realized_pnl = Decimal("0")
 
         # --- MARKET ORDER ---
         if order_type == "MARKET":
@@ -156,15 +167,15 @@ def place_order(
 
             if side == "BUY":
                 if cash_balance < total_cost:
-                    db.close()
-                    return {"error": f"Insufficient balance. Have ${cash_balance:.2f}, need ${total_cost:.2f}"}
-
-                # Deduct balance
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Insufficient balance. Have ${cash_balance:.2f}, need ${total_cost:.2f}"
+                    )
                 wallet.cash_balance = str((cash_balance - total_cost).quantize(Decimal("0.01")))
 
                 # Update position
                 position = db.query(PaperPosition).filter(
-                    PaperPosition.user_id == user_id,
+                    PaperPosition.user_id == current_user.id,
                     PaperPosition.symbol == symbol
                 ).first()
 
@@ -177,46 +188,41 @@ def place_order(
                     position.avg_entry_price = str((new_cost / new_qty).quantize(Decimal("0.01")))
                     position.total_cost_basis = str(new_cost)
                 else:
-                    position = PaperPosition(
-                        user_id=user_id,
+                    db.add(PaperPosition(
+                        user_id=current_user.id,
                         symbol=symbol,
                         quantity=str(qty),
                         avg_entry_price=str(fill_price.quantize(Decimal("0.01"))),
                         total_cost_basis=str(gross_cost),
                         realized_pnl="0"
-                    )
-                    db.add(position)
+                    ))
 
             elif side == "SELL":
                 position = db.query(PaperPosition).filter(
-                    PaperPosition.user_id == user_id,
+                    PaperPosition.user_id == current_user.id,
                     PaperPosition.symbol == symbol
                 ).first()
-
                 if not position or Decimal(position.quantity) < qty:
-                    db.close()
-                    return {"error": f"Insufficient {symbol} to sell. You don't have enough."}
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Insufficient {symbol} holdings to sell"
+                    )
 
-                # Calculate P&L
                 avg_entry = Decimal(position.avg_entry_price)
                 realized_pnl = ((fill_price - avg_entry) * qty - fee).quantize(Decimal("0.01"))
 
-                # Update position
                 new_qty = Decimal(position.quantity) - qty
                 position.quantity = str(new_qty)
                 position.realized_pnl = str(Decimal(position.realized_pnl) + realized_pnl)
 
-                # Credit balance
                 proceeds = (fill_price * qty) - fee
                 wallet.cash_balance = str((cash_balance + proceeds).quantize(Decimal("0.01")))
+                total_cost = gross_cost
 
-                total_cost = gross_cost  # for response
-
-            # Save order
+            # Save order + trade
             order = PaperOrder(
-                user_id=user_id,
-                symbol=symbol,
-                side=side,
+                user_id=current_user.id,
+                symbol=symbol, side=side,
                 order_type="MARKET",
                 quantity=str(qty),
                 status="FILLED"
@@ -224,19 +230,16 @@ def place_order(
             db.add(order)
             db.flush()
 
-            # Save trade
-            trade = PaperTrade(
+            db.add(PaperTrade(
                 order_id=order.id,
-                user_id=user_id,
-                symbol=symbol,
-                side=side,
+                user_id=current_user.id,
+                symbol=symbol, side=side,
                 quantity=str(qty),
                 fill_price=str(fill_price.quantize(Decimal("0.01"))),
                 fee=str(fee),
                 total_cost=str(total_cost),
-                realized_pnl=str(realized_pnl) if side == "SELL" else "0"
-            )
-            db.add(trade)
+                realized_pnl=str(realized_pnl)
+            ))
             db.commit()
 
             return {
@@ -248,27 +251,24 @@ def place_order(
                 "fill_price": float(fill_price),
                 "fee": float(fee),
                 "total_cost": float(total_cost),
-                "new_cash_balance": float(Decimal(wallet.cash_balance)),
-                "message": f"✅ {side} order filled! {qty} {symbol} at ${fill_price:,.2f}"
+                "realized_pnl": float(realized_pnl),
+                "new_cash_balance": float(Decimal(wallet.cash_balance))
             }
 
         # --- LIMIT ORDER ---
         elif order_type == "LIMIT":
-            if not limit_price:
-                db.close()
-                return {"error": "limit_price is required for LIMIT orders"}
-
-            lp = Decimal(str(limit_price))
+            lp = Decimal(str(req.limit_price))
             estimated_cost = (lp * qty * (1 + FEE_RATE)).quantize(Decimal("0.01"))
 
             if side == "BUY" and cash_balance < estimated_cost:
-                db.close()
-                return {"error": f"Insufficient balance for limit order. Have ${cash_balance:.2f}, need ~${estimated_cost:.2f}"}
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Insufficient balance. Have ${cash_balance:.2f}, need ~${estimated_cost:.2f}"
+                )
 
             order = PaperOrder(
-                user_id=user_id,
-                symbol=symbol,
-                side=side,
+                user_id=current_user.id,
+                symbol=symbol, side=side,
                 order_type="LIMIT",
                 quantity=str(qty),
                 target_price=str(lp),
@@ -285,20 +285,12 @@ def place_order(
                 "quantity": float(qty),
                 "limit_price": float(lp),
                 "estimated_cost": float(estimated_cost),
-                "message": f"📋 Limit order placed! {side} {qty} {symbol} when price hits ${lp:,.2f}"
+                "message": f"Limit order placed. Will execute when {symbol} hits ${lp:,.2f}"
             }
 
-        else:
-            db.close()
-            return {"error": f"Unknown order_type: {order_type}. Use MARKET or LIMIT."}
-
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"place_order error: {e}", exc_info=True)
-        if 'db' in locals():
-            db.rollback()
-            db.close()
-        return {"error": str(e)}
-
-
-if __name__ == "__main__":
-    mcp.run()
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
