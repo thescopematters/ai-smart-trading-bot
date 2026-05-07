@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Edit2, Trash2, Check, X, Loader2 } from 'lucide-react';
 import { useAdminAuth } from '../../context/AdminAuthContext';
+import { useToast } from '../../context/ToastContext';
+import ConfirmModal from '../../ui/ConfirmModal';
 
 const AdminQuestions = () => {
     const { token } = useAdminAuth();
@@ -8,6 +10,9 @@ const AdminQuestions = () => {
     const [loading, setLoading] = useState(true);
     const [editingId, setEditingId] = useState(null);
     const [editForm, setEditForm] = useState({ text: '', order: 0, active: true });
+
+    const toast = useToast();
+    const [modalState, setModalState] = useState({ isOpen: false, questionId: null });
     
     // Add new question form
     const [newQuestionText, setNewQuestionText] = useState('');
@@ -51,9 +56,10 @@ const AdminQuestions = () => {
 
             if (res.ok) {
                 setNewQuestionText('');
+                toast({ type: 'success', message: 'Question added successfully.' });
                 fetchQuestions();
             } else {
-                alert("Failed to add question.");
+                toast({ type: 'error', message: 'Failed to add question.' });
             }
         } catch (error) {
             console.error(error);
@@ -83,18 +89,20 @@ const AdminQuestions = () => {
 
             if (res.ok) {
                 setEditingId(null);
+                toast({ type: 'success', message: 'Question updated successfully.' });
                 fetchQuestions();
             } else {
-                alert("Failed to update.");
+                toast({ type: 'error', message: 'Failed to update question.' });
             }
         } catch (error) {
             console.error(error);
         }
     };
 
-    const handleDelete = async (id) => {
-        if (!window.confirm("Are you sure you want to delete this question?")) return;
-        
+    const handleDelete = async () => {
+        const id = modalState.questionId;
+        setModalState({ isOpen: false, questionId: null });
+
         try {
             const res = await fetch(`http://localhost:8000/api/admin/questions/${id}`, {
                 method: 'DELETE',
@@ -102,12 +110,14 @@ const AdminQuestions = () => {
             });
 
             if (res.ok) {
+                toast({ type: 'success', message: 'Question deleted successfully.' });
                 fetchQuestions();
             } else {
-                alert("Failed to delete.");
+                toast({ type: 'error', message: 'Failed to delete question.' });
             }
         } catch (error) {
             console.error(error);
+            toast({ type: 'error', message: 'Something went wrong.' });
         }
     };
 
@@ -171,7 +181,7 @@ const AdminQuestions = () => {
                                             <button onClick={() => handleEdit(q)} className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors">
                                                 <Edit2 size={18} />
                                             </button>
-                                            <button onClick={() => handleDelete(q.id)} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
+                                            <button onClick={() => setModalState({ isOpen: true, questionId: q.id })} className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
                                                 <Trash2 size={18} />
                                             </button>
                                         </>
@@ -182,6 +192,13 @@ const AdminQuestions = () => {
                     </ul>
                 )}
             </div>
+            <ConfirmModal
+                isOpen={modalState.isOpen}
+                title="Delete Question"
+                message="This question will be permanently removed from the chat screen. This cannot be undone."
+                onConfirm={handleDelete}
+                onCancel={() => setModalState({ isOpen: false, questionId: null })}
+            />
         </div>
     );
 };

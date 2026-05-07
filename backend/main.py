@@ -32,6 +32,7 @@ import rag_service
 # Import DB and Auth
 from database import get_db, User, AdminUser, ChatSession, ChatMessage, DefaultQuestion, Document
 from auth import get_password_hash, verify_password, create_access_token, get_current_user, get_current_admin, limiter
+from trading_routes import router as trading_router
 
 # Import Gemini error types for smart retry logic
 try:
@@ -112,6 +113,7 @@ app.add_middleware(
 # Apply Rate Limiter
 app.state.limiter = limiter
 
+app.include_router(trading_router)
 # Initialize ADK Services
 session_service = InMemorySessionService()
 artifact_service = InMemoryArtifactService()
