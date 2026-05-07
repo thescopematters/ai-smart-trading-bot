@@ -10,7 +10,8 @@ pydub
 python-multipart
 torch
 scipy
-chromadb
+chromadb>=0.4.0
+pydantic-settings
 sentence-transformers
 pypdf
 google-generativeai

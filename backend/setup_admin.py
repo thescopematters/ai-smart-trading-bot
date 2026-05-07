@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from database import Base, engine, SessionLocal, User, AdminUser, DefaultQuestion
+from database import Base, engine, SessionLocal, AdminUser, DefaultQuestion
 from auth import get_password_hash
 
 load_dotenv()
@@ -14,7 +14,6 @@ def setup_database():
         # Check if admin exists
         admin_user = os.getenv("ADMIN_USERNAME")
         admin_pass = os.getenv("ADMIN_PASSWORD")
-        admin_email = os.getenv("ADMIN_EMAIL")
         
         existing_admin = db.query(AdminUser).filter(AdminUser.username == admin_user).first()
         if not existing_admin:

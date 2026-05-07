@@ -27,10 +27,7 @@ import google.genai as genai
 
 # Import agent and RAG service
 from agent import root_agent
-try:
-    import rag_service
-except ImportError:
-    from . import rag_service
+import rag_service
 
 # Import DB and Auth
 from database import get_db, User, AdminUser, ChatSession, ChatMessage, DefaultQuestion, Document
@@ -169,7 +166,6 @@ def register(request: Request, data: RegisterRequest, db: Session = Depends(get_
         username=data.username,
         password_hash=get_password_hash(data.password),
         display_name=data.display_name or data.username,
-        role="user",
         is_guest=False
     )
     db.add(user)
