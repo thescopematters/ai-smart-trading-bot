@@ -27,6 +27,7 @@ chroma_db/
 *.bin
 *.pkl
 data/*.pkl
+backend/data/
 vector_store.pkl
 
 # Binaries and Logs

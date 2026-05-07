@@ -180,8 +180,8 @@ def register(request: Request, data: RegisterRequest, db: Session = Depends(get_
 @limiter.limit("10/minute")
 def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
     # Check for Admin Credentials from .env as fallback
-    admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")
-    admin_password = os.getenv("ADMIN_PASSWORD", "adminpassword123")
+    admin_email = os.getenv("ADMIN_EMAIL")
+    admin_password = os.getenv("ADMIN_PASSWORD")
     
     user = db.query(User).filter(User.email == data.email).first()
     if not user:
@@ -897,8 +897,8 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
 @app.post("/api/admin/login")
 def admin_login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     # Check Master Admin from .env
-    master_username = os.getenv("ADMIN_USERNAME", "admin")
-    master_password = os.getenv("ADMIN_PASSWORD", "admin123")
+    master_username = os.getenv("ADMIN_USERNAME")
+    master_password = os.getenv("ADMIN_PASSWORD")
     
     if form_data.username == master_username and form_data.password == master_password:
         access_token = create_access_token(data={"sub": master_username, "is_admin": True})

@@ -12,9 +12,9 @@ def setup_database():
     db = SessionLocal()
     try:
         # Check if admin exists
-        admin_user = os.getenv("ADMIN_USERNAME", "admin")
-        admin_pass = os.getenv("ADMIN_PASSWORD", "adminpassword123")
-        admin_email = os.getenv("ADMIN_EMAIL", "admin@example.com")
+        admin_user = os.getenv("ADMIN_USERNAME")
+        admin_pass = os.getenv("ADMIN_PASSWORD")
+        admin_email = os.getenv("ADMIN_EMAIL")
         
         existing_admin = db.query(User).filter(User.username == admin_user).first()
         if not existing_admin:
