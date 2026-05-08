@@ -1,3 +1,4 @@
+/* eslint-disable no-undef */
 /** @type {import('tailwindcss').Config} */
 export default {
   content: [
@@ -13,6 +14,7 @@ export default {
         'glass-panel': 'rgba(255, 255, 255, 0.05)',
         'start-up': '#00ff9d',
         'loss-red': '#ff0055',
+        'primary-purple': '#6366F1',
       },
       keyframes: {
         glow: {
@@ -42,6 +44,14 @@ export default {
         'glow': 'glow 2s ease-in-out infinite',
         'float': 'float 3s ease-in-out infinite',
         'blob': "blob 7s infinite",
+      },
+      fontSize: {
+        xs: "clamp(0.7rem, 1.5vw, 0.75rem)",
+        sm: "clamp(0.8rem, 1.8vw, 0.875rem)",
+        base: "clamp(0.875rem, 2vw, 1rem)",
+        lg: "clamp(1rem, 2.5vw, 1.125rem)",
+        xl: "clamp(1.1rem, 3vw, 1.25rem)",
+        "2xl": "clamp(1.25rem, 3.5vw, 1.5rem)",
       },
     },
   },

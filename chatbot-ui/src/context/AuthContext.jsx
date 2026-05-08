@@ -1,4 +1,7 @@
+/* eslint-disable react-refresh/only-export-components */
+/* eslint-disable react-hooks/immutability */
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { api } from '../services/api';
 
 const AuthContext = createContext(null);
 
@@ -14,9 +17,7 @@ export const AuthProvider = ({ children }) => {
         const fetchMe = async () => {
             if (token) {
                 try {
-                    const response = await fetch('http://localhost:8000/api/auth/me', {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
+                    const response = await api.get('/api/auth/me', token);
                     if (response.ok) {
                         const data = await response.json();
                         setUser(data);

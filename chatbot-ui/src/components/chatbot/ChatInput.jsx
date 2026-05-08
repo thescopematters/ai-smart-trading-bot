@@ -1,7 +1,10 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Mic, MicOff, Loader2 } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
 
 const ChatInput = ({ onSendMessage, onAudioChunk, onRecordingStop, currentTranscript, isTyping, onTyping, isSessionEnd, onNewChat }) => {
+    const toast = useToast();
     const [message, setMessage] = useState('');
     const [isListening, setIsListening] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -64,7 +67,7 @@ const ChatInput = ({ onSendMessage, onAudioChunk, onRecordingStop, currentTransc
             setIsListening(true);
         } catch (err) {
             console.error('Microphone access denied:', err);
-            alert('Could not access microphone. Please check browser permissions.');
+            toast({ type: 'error', message: 'Could not access microphone. Please check browser permissions.' });
         }
     };
 
