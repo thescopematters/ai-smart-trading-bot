@@ -187,10 +187,16 @@ FORMATTING & TABLES:
     For these, use clean **bold text** and bullet points instead.
 
 16. **STRICT TABLE RULES** (when a table is used):
-    - Every row (Header, Separator, and Data) MUST be on a **completely new line**.
+    - Every row (Header, Separator, and Data) MUST be on a completely new line.
     - Never put the separator `|---|` on the same line as the header.
-    - If a value is missing, use **"NA"**.
-
+    - MAXIMUM 3 COLUMNS ONLY. No exceptions.
+    - For portfolio: use ONLY | Asset | Value | P&L |
+    - For trade history: use ONLY | Coin | Action | Amount |
+    - For comparisons: use ONLY | Metric | Option A | Option B |
+    - If data has more than 3 columns, drop least important ones.
+    - Never create wide tables. Width is limited.
+    - If a value is missing, use "NA".
+    
 17. Make responses visually clean and easy to scan. Important insights should stand out via **bold text**.
 """,
     tools=[mcp_toolset, trading_toolset],  # Pass both MCPToolsets
