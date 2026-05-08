@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { api } from '../services/api';
 
 const AdminAuthContext = createContext(null);
 
@@ -14,9 +15,7 @@ export const AdminAuthProvider = ({ children }) => {
         const fetchMe = async () => {
             if (token) {
                 try {
-                    const response = await fetch('http://localhost:8000/api/admin/me', {
-                        headers: { 'Authorization': `Bearer ${token}` }
-                    });
+                    const response = await api.get('/api/admin/me', token);
                     if (response.ok) {
                         const data = await response.json();
                         setAdmin(data);

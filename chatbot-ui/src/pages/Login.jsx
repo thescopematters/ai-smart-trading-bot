@@ -1,8 +1,10 @@
+/* eslint-disable no-unused-vars */
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { LogIn, UserPlus, UserCircle, Shield, ArrowRight, Loader2, Eye, EyeOff } from 'lucide-react';
 import clsx from 'clsx';
+import { api } from '../services/api';
 
 const Login = () => {
     // Initial mode from localStorage or default to 'login'
@@ -88,11 +90,7 @@ const Login = () => {
         }
 
         try {
-            const response = await fetch(`http://localhost:8000/api/auth/${endpoint}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
+            const response = await api.post(`/api/auth/${endpoint}`, body);
 
             const data = await response.json();
 
@@ -117,7 +115,7 @@ const Login = () => {
     const handleGuestLogin = async () => {
         setLoading(true);
         try {
-            const response = await fetch('http://localhost:8000/api/auth/guest', { method: 'POST' });
+            const response = await api.post('/api/auth/guest', {});
             const data = await response.json();
             if (response.ok) {
                 login(data.access_token, data.user);

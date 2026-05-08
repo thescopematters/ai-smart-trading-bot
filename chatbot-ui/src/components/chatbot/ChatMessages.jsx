@@ -1,3 +1,5 @@
+/* eslint-disable react-hooks/set-state-in-effect */
+/* eslint-disable no-unused-vars */
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
@@ -59,10 +61,10 @@ const ChatMessages = ({ messages, isTyping }) => {
                             </div>
                         )}
 
-                        <div className={clsx("flex flex-col max-w-[80%]", msg.isUser ? "items-end" : "items-start")}>
+                        <div className={clsx("flex flex-col max-w-[80%] min-w-0", msg.isUser ? "items-end" : "items-start")}>
                             <div
                                 className={clsx(
-                                    "rounded-2xl px-5 py-3 text-sm shadow-sm",
+                                    "rounded-2xl px-5 py-3 text-sm shadow-sm min-w-0 overflow-x-auto",
                                     msg.isUser
                                         ? "bg-violet-600 text-white rounded-br-none shadow-indigo-500/20"
                                         : msg.isError
@@ -94,13 +96,13 @@ const ChatMessages = ({ messages, isTyping }) => {
                                                     )
                                                 },
                                                 table: ({ node, ...props }) => (
-                                                    <div className="overflow-x-auto my-4 rounded-xl border border-slate-200">
+                                                    <div className="overflow-x-auto max-w-full my-4 rounded-xl border border-slate-200">
                                                         <table className="min-w-full divide-y divide-slate-200" {...props} />
                                                     </div>
                                                 ),
                                                 thead: ({ node, ...props }) => <thead className="bg-slate-50" {...props} />,
                                                 th: ({ node, ...props }) => <th className="px-4 py-2 text-left text-xs font-bold text-slate-600 uppercase tracking-wider" {...props} />,
-                                                td: ({ node, ...props }) => <td className="px-4 py-2 text-xs text-slate-700 whitespace-nowrap border-t border-slate-100" {...props} />,
+                                                td: ({ node, ...props }) => <td className="px-4 py-2 text-xs text-slate-700 whitespace-normal break-words border-t border-slate-100" {...props} />,
                                                 tr: ({ node, ...props }) => <tr className="hover:bg-slate-50/50 transition-colors" {...props} />
                                             }}
                                         >

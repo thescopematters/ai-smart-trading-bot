@@ -3,6 +3,7 @@ import { Plus, Edit2, Trash2, Check, X, Loader2 } from 'lucide-react';
 import { useAdminAuth } from '../../context/AdminAuthContext';
 import { useToast } from '../../context/ToastContext';
 import ConfirmModal from '../../ui/ConfirmModal';
+import { api } from '../../services/api';
 
 const AdminQuestions = () => {
     const { token } = useAdminAuth();
@@ -20,7 +21,7 @@ const AdminQuestions = () => {
     const fetchQuestions = async () => {
         setLoading(true);
         try {
-            const res = await fetch('http://localhost:8000/api/questions');
+            const res = await api.get('/api/questions');
             if (res.ok) {
                 const data = await res.json();
                 setQuestions(data);
@@ -41,18 +42,7 @@ const AdminQuestions = () => {
         if (!newQuestionText.trim()) return;
 
         try {
-            const res = await fetch('http://localhost:8000/api/admin/questions', {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}` 
-                },
-                body: JSON.stringify({
-                    question_text: newQuestionText.trim(),
-                    display_order: questions.length,
-                    is_active: true
-                })
-            });
+            const res = await api.post('/api/admin/questions', { question_text: newQuestionText.trim(), display_order: questions.length, is_active: true }, token);
 
             if (res.ok) {
                 setNewQuestionText('');
@@ -74,18 +64,7 @@ const AdminQuestions = () => {
     const handleUpdate = async (id) => {
         if (!editForm.text.trim()) return;
         try {
-            const res = await fetch(`http://localhost:8000/api/admin/questions/${id}`, {
-                method: 'PUT',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}` 
-                },
-                body: JSON.stringify({
-                    question_text: editForm.text.trim(),
-                    display_order: editForm.order,
-                    is_active: editForm.active
-                })
-            });
+            const res = await api.put(`/api/admin/questions/${id}`, { question_text: editForm.text.trim(), display_order: editForm.order, is_active: editForm.active }, token);
 
             if (res.ok) {
                 setEditingId(null);
@@ -104,10 +83,7 @@ const AdminQuestions = () => {
         setModalState({ isOpen: false, questionId: null });
 
         try {
-            const res = await fetch(`http://localhost:8000/api/admin/questions/${id}`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const res = await api.delete(`/api/admin/questions/${id}`, token);
 
             if (res.ok) {
                 toast({ type: 'success', message: 'Question deleted successfully.' });

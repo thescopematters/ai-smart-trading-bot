@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAdminAuth } from '../../context/AdminAuthContext';
 import { Users, Mail, User as UserIcon, Shield, Search, RefreshCcw, MoreHorizontal } from 'lucide-react';
+import { api } from '../../services/api';
 
 const AdminUsers = () => {
     const [users, setUsers] = useState([]);
@@ -11,9 +12,8 @@ const AdminUsers = () => {
     const fetchUsers = async () => {
         setLoading(true);
         try {
-            const response = await fetch('http://localhost:8000/api/admin/users', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const response = await api.get('/api/admin/users', token);
+            
             if (response.ok) {
                 const data = await response.json();
                 setUsers(data);
