@@ -101,12 +101,40 @@ def get_quote(symbol: str, quantity: float, side: str, user_id: str = DEFAULT_US
         }
 
     except Exception as e:
-        logger.error(f"get_quote error: {e}")
+        logger.error(f"Error in get_quote: {e}")
         return {"error": str(e)}
 
 
 # ---------------------------------------------------------
-# Tool 2: place_order
+# Tool 2: get_balance
+# ---------------------------------------------------------
+@mcp.tool()
+def get_balance(user_id: str = DEFAULT_USER_ID) -> dict:
+    """
+    Get the current paper trading cash balance.
+    """
+    try:
+        if SessionLocal:
+            db = SessionLocal()
+            wallet = db.query(PaperWallet).filter(PaperWallet.user_id == user_id).first()
+            if wallet:
+                balance = float(wallet.cash_balance)
+                db.close()
+                return {
+                    "balance": balance,
+                    "currency": "USD",
+                    "status": "success",
+                    "message": f"Your current cash balance is **${balance:,.2f} USD**."
+                }
+            db.close()
+        return {"error": "Wallet not found."}
+    except Exception as e:
+        logger.error(f"Error in get_balance: {e}")
+        return {"error": str(e)}
+
+
+# ---------------------------------------------------------
+# Tool 3: place_order
 # ---------------------------------------------------------
 @mcp.tool()
 def place_order(
