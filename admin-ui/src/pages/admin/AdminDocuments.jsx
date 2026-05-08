@@ -1,13 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Loader2, Trash2, RefreshCw, Database, Server } from 'lucide-react';
 import { useAdminAuth } from '../../context/AdminAuthContext';
+import { useToast } from '../../context/ToastContext';
+import ConfirmModal from '../../ui/ConfirmModal';
 
 const AdminDocuments = () => {
+    const toast = useToast();
     const { token } = useAdminAuth();
     const [documents, setDocuments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [uploading, setUploading] = useState(false);
     const [file, setFile] = useState(null);
+    const [modalState, setModalState] = useState({ isOpen: false, docId: null });
 
     const fetchDocuments = async () => {
         setLoading(true);
@@ -47,31 +51,34 @@ const AdminDocuments = () => {
 
             if (res.ok) {
                 setFile(null);
+                toast({ type: 'success', message: 'Document uploaded and indexed successfully.' });
                 fetchDocuments();
             } else {
                 const errorData = await res.json();
-                alert(`Upload failed: ${errorData.detail || "Unknown error"}`);
+                toast({ type: 'error', message: `Upload failed: ${errorData.detail || 'Unknown error'}` });
             }
         } catch (error) {
             console.error("Upload error", error);
-            alert(`Upload failed: ${error.message}`);
+            toast({ type: 'error', message: `Upload failed: ${error.message}` });
         } finally {
             setUploading(false);
         }
     };
 
-    const handleDelete = async (id) => {
-        if (!window.confirm("Are you sure you want to delete this document? This will remove its knowledge from the chatbot and delete the file.")) return;
-        
+    const handleDelete = async () => {
+        const id = modalState.docId;
+        setModalState({ isOpen: false, docId: null });
+
         try {
             const res = await fetch(`http://localhost:8000/api/admin/documents/${id}`, {
                 method: 'DELETE',
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (res.ok) {
+                toast({ type: 'success', message: 'Document deleted successfully.' });
                 fetchDocuments();
             } else {
-                alert("Delete failed.");
+                toast({ type: 'error', message: 'Failed to delete document.' });
             }
         } catch (error) {
             console.error("Delete error", error);
@@ -172,7 +179,7 @@ const AdminDocuments = () => {
                                         </td>
                                         <td className="p-4 text-right">
                                             <button 
-                                                onClick={() => handleDelete(doc.id)}
+                                                onClick={() => setModalState({ isOpen: true, docId: doc.id })}
                                                 className="p-2 text-text-muted hover:text-red-600 transition-colors"
                                                 title="Delete document"
                                             >
@@ -186,6 +193,15 @@ const AdminDocuments = () => {
                     </div>
                 )}
             </div>
+
+            <ConfirmModal
+                isOpen={modalState.isOpen}
+                title="Delete Document"
+                message="This will remove its knowledge from the chatbot and delete the file. This cannot be undone."
+                onConfirm={handleDelete}
+                onCancel={() => setModalState({ isOpen: false, docId: null })}
+            />
+
         </div>
     );
 };
