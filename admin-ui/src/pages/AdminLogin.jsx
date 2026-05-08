@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAdminAuth } from '../context/AdminAuthContext';
 import { LogIn, Shield, ArrowRight, Loader2, Eye, EyeOff } from 'lucide-react';
+import { api } from '../services/api';
 
 const AdminLogin = () => {
     const [loading, setLoading] = useState(false);
@@ -30,19 +31,13 @@ const AdminLogin = () => {
         formDataPayload.append('password', formData.password);
 
         try {
-            const response = await fetch(`http://localhost:8000/api/admin/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: formDataPayload
-            });
+            const response = await api.postUrlEncoded('/api/admin/login', formDataPayload);
 
             const data = await response.json();
 
             if (response.ok) {
                 // Fetch admin info after login
-                const meRes = await fetch('http://localhost:8000/api/admin/me', {
-                    headers: { 'Authorization': `Bearer ${data.access_token}` }
-                });
+                const meRes = await api.get('/api/admin/me', data.access_token);
                 const adminData = await meRes.json();
                 login(data.access_token, adminData);
                 navigate('/');

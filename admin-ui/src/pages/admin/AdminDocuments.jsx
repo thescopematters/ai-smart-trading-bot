@@ -3,6 +3,7 @@ import { Upload, FileText, Loader2, Trash2, RefreshCw, Database, Server } from '
 import { useAdminAuth } from '../../context/AdminAuthContext';
 import { useToast } from '../../context/ToastContext';
 import ConfirmModal from '../../ui/ConfirmModal';
+import { api } from '../../services/api';
 
 const AdminDocuments = () => {
     const toast = useToast();
@@ -16,9 +17,7 @@ const AdminDocuments = () => {
     const fetchDocuments = async () => {
         setLoading(true);
         try {
-            const res = await fetch('http://localhost:8000/api/admin/documents', {
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const res = await api.get('/api/admin/documents', token);
             if (res.ok) {
                 const data = await res.json();
                 setDocuments(data);
@@ -43,11 +42,7 @@ const AdminDocuments = () => {
         formData.append('file', file);
 
         try {
-            const res = await fetch('http://localhost:8000/api/admin/documents', {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${token}` },
-                body: formData
-            });
+            const res = await api.postForm('/api/admin/documents', formData, token);
 
             if (res.ok) {
                 setFile(null);
@@ -70,10 +65,7 @@ const AdminDocuments = () => {
         setModalState({ isOpen: false, docId: null });
 
         try {
-            const res = await fetch(`http://localhost:8000/api/admin/documents/${id}`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${token}` }
-            });
+            const res = await api.delete(`/api/admin/documents/${id}`, token);
             if (res.ok) {
                 toast({ type: 'success', message: 'Document deleted successfully.' });
                 fetchDocuments();

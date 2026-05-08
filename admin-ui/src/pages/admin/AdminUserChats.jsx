@@ -14,6 +14,7 @@ import {
 import clsx from 'clsx';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { api } from '../../services/api';
 
 const AdminUserChats = () => {
     const [sessions, setSessions] = useState([]);
@@ -27,9 +28,7 @@ const AdminUserChats = () => {
     const fetchSessions = async () => {
         setLoading(true);
         try {
-            const response = await fetch('http://localhost:8000/api/admin/sessions', {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const response = await api.get('/api/admin/sessions', token);
             if (response.ok) {
                 const data = await response.json();
                 setSessions(data);
@@ -43,9 +42,7 @@ const AdminUserChats = () => {
 
     const fetchMessages = async (sessionId) => {
         try {
-            const response = await fetch(`http://localhost:8000/api/admin/sessions/${sessionId}/messages`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
+            const response = await api.get(`/api/admin/sessions/${sessionId}/messages`, token);
             if (response.ok) {
                 const data = await response.json();
                 setMessages(data);
