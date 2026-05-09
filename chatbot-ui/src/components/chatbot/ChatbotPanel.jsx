@@ -164,12 +164,15 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
   }, [activeSessionId, isGuest, userPrefix]);
 
   // ── WebSocket ───────────────────────────────────────────────────────────
-  const wsUrl = import.meta.env.VITE_WS_URL || "ws://localhost:8000/ws/chat";
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+  const WS_BASE = API_BASE.replace(/^http/, 'ws');
+  const wsUrl = `${WS_BASE}/ws/chat`;
+
   const chatControls = useChatWebSocket(
     `${wsUrl}?token=${token || ""}`,
     activeSessionId,
     userPrefix,
-    !showHistory, // isActive: suppress notifications when looking at chat
+    !showHistory,
   );
   const { messages } = chatControls;
 
