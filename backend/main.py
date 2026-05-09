@@ -105,7 +105,7 @@ app = FastAPI(title="CryptoAI Backend")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "https://ai-smart-trading-bot-j6ry.vercel.app",
-    "https://ai-smart-trading-bot.vercel.app" "*"],
+    "https://ai-smart-trading-bot.vercel.app", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
