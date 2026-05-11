@@ -27,12 +27,14 @@ import google.genai as genai
 
 # Import agent and RAG service
 from agent import root_agent
-import rag_service
+try:
+    import rag_service
+except ImportError:
+    from . import rag_service
 
 # Import DB and Auth
-from database import get_db, User, AdminUser, ChatSession, ChatMessage, DefaultQuestion, Document
+from database import get_db, SessionLocal, User, AdminUser, ChatSession, ChatMessage, DefaultQuestion, Document
 from auth import get_password_hash, verify_password, create_access_token, get_current_user, get_current_admin, limiter
-from trading_routes import router as trading_router
 
 # Import Gemini error types for smart retry logic
 try:
@@ -113,7 +115,6 @@ app.add_middleware(
 # Apply Rate Limiter
 app.state.limiter = limiter
 
-app.include_router(trading_router)
 # Initialize ADK Services
 session_service = InMemorySessionService()
 artifact_service = InMemoryArtifactService()
@@ -168,6 +169,7 @@ def register(request: Request, data: RegisterRequest, db: Session = Depends(get_
         username=data.username,
         password_hash=get_password_hash(data.password),
         display_name=data.display_name or data.username,
+        role="user",
         is_guest=False
     )
     db.add(user)
@@ -418,6 +420,50 @@ async def generate_ai_followup(last_bot_message: str) -> str:
         logger.warning(f"AI follow-up generation failed: {e}")
         return ""
 
+async def prime_adk_session_from_db(session_id: str, user_id_ai: str):
+    """
+    Loads last 30 messages from MySQL and injects them into the ADK SessionService
+    if the runtime session is currently empty. Ensures AI memory survives restarts.
+    """
+    session = await session_service.get_session(
+        app_name="CryptoBackend", user_id=user_id_ai, session_id=session_id
+    )
+    
+    # If session already has messages in RAM, don't re-prime (prevents duplicates)
+    if session and hasattr(session, 'history') and len(session.history) > 0:
+        return 
+    
+    db = SessionLocal()
+    try:
+        # Fetch last 30 messages to provide deep context without token explosion
+        history = db.query(ChatMessage).filter(ChatMessage.session_id == session_id).order_by(ChatMessage.created_at.desc()).limit(30).all()
+        history.reverse() # Order chronologically
+        
+        if not history:
+            return
+            
+        adk_messages = []
+        for msg in history:
+            # Map DB roles to Gemini/ADK expected roles
+            role = "user" if msg.role == "user" else "model"
+            content = types.Content(role=role, parts=[types.Part(text=msg.content)])
+            adk_messages.append(content)
+            
+        if not session:
+            await session_service.create_session(
+                app_name="CryptoBackend", user_id=user_id_ai, session_id=session_id
+            )
+            session = await session_service.get_session(
+                app_name="CryptoBackend", user_id=user_id_ai, session_id=session_id
+            )
+            
+        if session:
+            session.history = adk_messages
+            logger.info(f"✅ Primed ADK session {session_id} with {len(adk_messages)} messages from DB")
+    except Exception as e:
+        logger.error(f"❌ Failed to prime session {session_id}: {e}")
+    finally:
+        db.close()
 
 @app.websocket("/ws/chat/{client_id}")
 async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Optional[str] = None):
@@ -454,6 +500,10 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
     db_user_id = current_user.id
     
     logger.info(f"Client {client_id} connected (User: {user_id_for_ai})")
+
+    # --- Session Recovery & Priming ---
+    # Rehydrate AI memory from DB before processing any new messages
+    await prime_adk_session_from_db(client_id, user_id_for_ai)
 
     # Audio buffer: accumulates raw webm bytes from MediaRecorder chunks
     audio_buffer = bytearray()
@@ -659,7 +709,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
     db.close()
 
     existing_session = await session_service.get_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
-    history_found = existing_session and hasattr(existing_session, 'messages') and len(existing_session.messages) > 0
+    history_found = (existing_session and hasattr(existing_session, 'history') and len(existing_session.history) > 0)
 
     if history_found:
         interaction_started = True
@@ -667,7 +717,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
         
         # Look for the last bot message to provide context for potential follow-up resume
         last_bot_msg = ""
-        for m in reversed(existing_session.messages):
+        for m in reversed(existing_session.history):
             if m.role == "model":
                 for p in m.parts:
                     if hasattr(p, 'text') and p.text:
@@ -785,10 +835,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
                         for attempt in range(1, max_retries + 1):
                             try:
                                 logger.info(f"Running agent for {client_id} (attempt {attempt})...")
+                                # Inject structured [SYSTEM CONTEXT] for deterministic identity in tool calls
+                                # This is internal-only and won't be visible to the user in the UI
+                                context_prefix = f"[SYSTEM CONTEXT: user_id={db_user_id}, session_id={client_id}]\n"
+                                
                                 async for event in runner.run_async(
                                     user_id=user_id_for_ai,
                                     session_id=client_id,
-                                    new_message=types.Content(role="user", parts=[types.Part(text=user_text)])
+                                    new_message=types.Content(role="user", parts=[types.Part(text=f"{context_prefix}{user_text}")])
                                 ):
                                     chunk_text = ""
                                     if hasattr(event, 'text') and event.text:
@@ -810,6 +864,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
                                     response_text = "I'm sorry, I couldn't process that. Please try again."
                                     await safe_send({"type": "response.text_partial", "text": response_text})
                                 await safe_send({"type": "response.text", "text": response_text})
+                                await safe_send({"type": "response.complete"})
                                 
                                 # Save Bot response to DB
                                 if db_user_id:
@@ -842,6 +897,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
                                         "type": "error",
                                         "message": "Our analysis engine is temporarily unavailable. Please try again in a moment."
                                     })
+                                    await safe_send({"type": "response.complete"})
 
                             except Exception as e:
                                 err_msg = str(e)
@@ -852,10 +908,12 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
                                 if is_429:
                                     logger.error(f"❌ Gemini Quota Exceeded (429): {err_msg}")
                                     await safe_send({"type": "error", "message": "I've hit my daily limit for analysis. Please try again tomorrow or upgrade your Gemini API key plan."})
+                                    await safe_send({"type": "response.complete"})
                                     break
                                 elif is_401:
                                     logger.error(f"❌ Gemini API Key Error (401): {err_msg}")
                                     await safe_send({"type": "error", "message": "My API key seems to be invalid. Please check the .env file and ensure your Google AI Studio key is correct."})
+                                    await safe_send({"type": "response.complete"})
                                     break
                                 elif is_503 and attempt < max_retries:
                                     wait_time = attempt * 5
@@ -870,6 +928,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
                                 else:
                                     logger.error(f"Unhandled Agent error: {err_msg}", exc_info=True)
                                     await websocket.send_json({"type": "error", "message": "An unexpected error occurred. Please refresh and try again."})
+                                    await safe_send({"type": "response.complete"})
                                     break
                     except WebSocketDisconnect:
                         logger.info(f"Client {client_id} disconnected during agent execution.")

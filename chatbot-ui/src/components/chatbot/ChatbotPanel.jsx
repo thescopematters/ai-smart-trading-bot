@@ -49,6 +49,41 @@ const stripMarkdown = (text = "") => {
 const newSessionId = () =>
   `session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
+// ─── Minimalist Ghost UI Skeletons ──────────────────────────────────────────
+
+const HistorySkeleton = () => (
+  <div className="flex flex-col gap-3 p-4">
+    {[1, 2, 3, 4, 5].map((i) => (
+      <div key={i} className="flex items-center gap-4 p-4 bg-white/60 border border-white/40 rounded-2xl animate-pulse">
+        <div className="w-12 h-12 rounded-full bg-slate-100 shadow-inner" />
+        <div className="flex-1 space-y-2">
+          <div className="h-4 bg-indigo-500/10 rounded w-1/3" />
+          <div className="h-3 bg-indigo-500/5 rounded w-2/3" />
+        </div>
+      </div>
+    ))}
+  </div>
+);
+
+const ChatSkeleton = () => (
+  <div className="flex-1 flex flex-col p-6 space-y-8 animate-pulse overflow-hidden bg-slate-50/20">
+    <div className="flex justify-start gap-3">
+      <div className="w-8 h-8 rounded-full bg-slate-100 shrink-0" />
+      <div className="h-20 bg-white rounded-2xl rounded-bl-none w-3/4 shadow-sm border border-slate-100" />
+    </div>
+    <div className="flex justify-end gap-3">
+      <div className="h-12 bg-violet-600/10 rounded-2xl rounded-br-none w-2/3 shadow-sm border border-violet-100/50" />
+    </div>
+    <div className="flex justify-start gap-3">
+      <div className="w-8 h-8 rounded-full bg-slate-100 shrink-0" />
+      <div className="h-24 bg-white rounded-2xl rounded-bl-none w-4/5 shadow-sm border border-slate-100" />
+    </div>
+    <div className="flex justify-end gap-3">
+      <div className="h-16 bg-violet-600/10 rounded-2xl rounded-br-none w-1/2 shadow-sm border border-violet-100/50" />
+    </div>
+  </div>
+);
+
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 const ChatbotPanel = ({ onMaximize, isMaximized }) => {
@@ -174,17 +209,17 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
   const { messages } = chatControls;
 
   // ── Default questions ───────────────────────────────────────────────────
-    const fetchDefaultQuestions = useCallback(async () => {
+  const fetchDefaultQuestions = useCallback(async () => {
     try {
-        const res = await api.get('/api/questions');
-        if (res.ok) {
+      const res = await api.get('/api/questions');
+      if (res.ok) {
         const data = await res.json();
         setDefaultQuestions(data);
-        }
+      }
     } catch {
-        // silent fail
+      // silent fail
     }
-    }, []);
+  }, []);
 
   useEffect(() => {
     fetchDefaultQuestions();
@@ -223,7 +258,7 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
           const isUnread =
             s.last_message_at > viewedAt ||
             localStorage.getItem(`crypto_unread_${userPrefix}_${s.id}`) ===
-              "true";
+            "true";
 
           return {
             id: s.id,
@@ -368,12 +403,7 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
 
             <div className="flex-1 overflow-y-auto w-full custom-scrollbar p-2">
               {loadingSessions || authLoading ? (
-                <div className="flex flex-col items-center justify-center h-full text-indigo-500 gap-4 p-8">
-                  <RefreshCcw className="w-12 h-12 animate-spin text-indigo-400 opacity-80" />
-                  <p className="text-center font-medium text-slate-500 animate-pulse">
-                    Loading history...
-                  </p>
-                </div>
+                <HistorySkeleton />
               ) : sessions.length === 0 ? (
                 <div className="flex flex-col items-center justify-center h-full text-slate-400 gap-4 p-8">
                   <MessageCircle className="w-16 h-16 text-slate-300" />
@@ -430,11 +460,10 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
                                         : session.id,
                                     );
                                   }}
-                                  className={`p-1 rounded-full transition-all ${
-                                    menuOpenId === session.id
+                                  className={`p-1 rounded-full transition-all ${menuOpenId === session.id
                                       ? "opacity-100 bg-slate-200 text-slate-600"
                                       : "hover:bg-slate-200 text-slate-400 opacity-0 group-hover:opacity-100"
-                                  }`}
+                                    }`}
                                 >
                                   <MoreVertical size={14} />
                                 </button>
@@ -522,7 +551,7 @@ const ActiveChat = ({
   return (
     <>
       <ChatHeader
-        onClose={() => {}}
+        onClose={() => { }}
         status={
           !isConnected ? "Connecting..." : isTyping ? "Processing..." : "Online"
         }
@@ -533,12 +562,7 @@ const ActiveChat = ({
       />
 
       {!isConnected ? (
-        <div className="flex-1 flex flex-col items-center justify-center text-indigo-500 gap-4 p-8">
-          <RefreshCcw className="w-12 h-12 animate-spin text-indigo-400 opacity-80" />
-          <p className="text-center font-medium text-slate-500 animate-pulse">
-            Loading chats...
-          </p>
-        </div>
+        <ChatSkeleton />
       ) : (
         <div className="flex-1 flex flex-col overflow-hidden">
           <ChatMessages messages={messages} isTyping={isTyping} />

@@ -6,6 +6,17 @@
   body {
     @apply bg-deep-black text-white font-sans overflow-x-hidden;
   }
+
+  ::selection {
+    background-color: #6366f1; /* Premium Indigo/Purple Selection */
+    color: #ffffff;
+    text-shadow: none;
+  }
+
+  ::-moz-selection {
+    background-color: #6366f1;
+    color: #ffffff;
+  }
 }
 
 @layer utilities {
