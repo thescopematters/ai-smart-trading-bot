@@ -51,7 +51,7 @@ const newSessionId = () =>
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
-const ChatbotPanel = ({ onMaximize, isMaximized }) => {
+const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
   const toast = useToast();
   const [confirmModal, setConfirmModal] = useState({
     open: false,
@@ -483,6 +483,7 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
             onOpenHistory={() => setShowHistory(true)}
             showHistoryBtn={showHistoryBtn}
             onNewChat={startNewChat}
+            onClose={onClose}
             onMaximize={onMaximize}
             isMaximized={isMaximized}
           />
@@ -507,6 +508,7 @@ const ActiveChat = ({
   onOpenHistory,
   showHistoryBtn,
   onNewChat,
+  onClose,
   onMaximize,
   isMaximized,
 }) => {
@@ -525,7 +527,7 @@ const ActiveChat = ({
   return (
     <>
       <ChatHeader
-        onClose={() => {}}
+        onClose={onClose}
         status={
           !isConnected ? "Connecting..." : isTyping ? "Processing..." : "Online"
         }

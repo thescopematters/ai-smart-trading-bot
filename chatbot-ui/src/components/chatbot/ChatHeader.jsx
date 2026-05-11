@@ -28,15 +28,25 @@ const ChatHeader = ({ onClose, onOpenHistory, status = 'Online', showHistoryBtn 
             </div>
 
             {/* RIGHT SIDE - maximize button right of everything */}
-            {onMaximize && (
+            <div className="flex items-center gap-2">
                 <button
+                    onClick={onClose}
+                    className="p-3.5 rounded-xl bg-slate-900 text-white hover:bg-black flex sm:hidden items-center justify-center transition-all"
+                    title="Close"
+                >
+                    <X className="w-4 h-4" />
+                </button>
+
+                {onMaximize && (
+                    <button
                     onClick={onMaximize}
                     className="p-3.5 rounded-xl bg-slate-900 text-white hover:bg-black flex items-center justify-center transition-all"
                     title={isMaximized ? 'Minimize' : 'Maximize'}
-                >
+                    >
                     {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-                </button>
-            )}
+                    </button>
+                )}
+            </div>
         </div>
     );
 };

@@ -38,7 +38,7 @@ const ChatWidget = () => {
                     sm:bottom-24 sm:left-auto sm:right-6 sm:w-[420px] sm:h-[600px] sm:rounded-2xl
                     shadow-2xl shadow-indigo-900/20"
      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
-                    <ChatbotPanel onMaximize={toggleMaximize} isMaximized={false} />
+                    <ChatbotPanel onClose={handleClose} onMaximize={toggleMaximize} isMaximized={false} />
                 </div>
             )}
 
@@ -48,7 +48,7 @@ const ChatWidget = () => {
                     <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={handleClose} />
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-8">
                         <div className="w-full max-w-5xl h-[100dvh] sm:h-[82vh] sm:rounded-2xl rounded-none shadow-2xl overflow-hidden border border-slate-200 flex flex-col bg-white sm:mt-4">
-                            <ChatbotPanel onMaximize={toggleMaximize} isMaximized={true} />
+                            <ChatbotPanel onClose={handleClose} onMaximize={toggleMaximize} isMaximized={true} />
                         </div>
                     </div>
                 </>
