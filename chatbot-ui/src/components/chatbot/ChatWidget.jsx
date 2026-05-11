@@ -20,8 +20,8 @@ const ChatWidget = () => {
             <button
                 onClick={handleToggle}
                 className={`fixed bottom-5 right-4 sm:right-6 z-[60] w-14 h-14 rounded-full shadow-2xl transition-all duration-300 flex items-center justify-center
-                    ${isOpen ? 'bg-slate-700 hover:bg-slate-800' : 'bg-indigo-600 hover:bg-indigo-500 hover:scale-110'}`}
-            >
+                ${isOpen ? 'hidden sm:flex bg-slate-700 hover:bg-slate-800' : 'flex bg-indigo-600 hover:bg-indigo-500 hover:scale-110'}`}
+                >
                 {isOpen ? <X className="w-5 h-5 text-white" /> : <MessageSquare className="w-6 h-6 text-white" />}
                 {!isOpen && (
                     <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5">
