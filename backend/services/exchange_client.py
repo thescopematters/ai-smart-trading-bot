@@ -1,49 +1,42 @@
-import os
-import requests
 import logging
-from decimal import Decimal
-from dotenv import load_dotenv
-
-load_dotenv()
+from typing import Optional, Dict, Any
+from sqlalchemy.orm import Session
+from database import User
+from exchange_gateway.exchange_router import get_exchange
 
 logger = logging.getLogger("ExchangeClient")
-BASE_URL = os.getenv("EXCHANGE_API_BASE_URL", "http://localhost:8000/api/v1")
 
 class ExchangeClient:
-    def get_quote(self, symbol: str, quantity: float, side: str, token: str = "") -> dict:
-        """Calls POST /api/v1/get_quote"""
-        url = f"{BASE_URL}/get_quote"
-        headers = {"Authorization": f"Bearer {token}"} if token else {}
-        payload = {
-            "symbol": symbol,
-            "quantity": quantity,
-            "side": side
-        }
+    """
+    Client interface for interacting with crypto exchanges.
+    Delegates to the appropriate gateway via exchange_router.
+    """
+    def get_quote(self, db: Session, user: User, symbol: str, quantity: float, side: str, token: str = "") -> Dict[str, Any]:
+        """Returns live price and wallet info."""
         try:
-            resp = requests.post(url, json=payload, headers=headers, timeout=10)
-            resp.raise_for_status()
-            return resp.json()
+            exchange = get_exchange(db, user)
+            return exchange.get_quote(symbol, quantity, side, token)
         except Exception as e:
-            logger.error(f"Error fetching quote: {e}")
-            return {"success": False, "error": str(e)}
+            logger.error(f"ExchangeClient get_quote error: {e}")
+            return {"error": str(e)}
 
-    def place_order(self, symbol: str, quantity: float, side: str, order_type: str, limit_price: float = None, token: str = "") -> dict:
-        """Calls POST /api/v1/place_order"""
-        url = f"{BASE_URL}/place_order"
-        headers = {"Authorization": f"Bearer {token}"} if token else {}
-        payload = {
-            "symbol": symbol,
-            "quantity": quantity,
-            "side": side,
-            "order_type": order_type,
-            "limit_price": limit_price
-        }
+    def place_order(self, db: Session, user: User, symbol: str, quantity: float, side: str, 
+                    order_type: str, limit_price: float = None, token: str = "") -> Dict[str, Any]:
+        """Executes a trade on the active exchange."""
         try:
-            resp = requests.post(url, json=payload, headers=headers, timeout=10)
-            resp.raise_for_status()
-            return resp.json()
+            exchange = get_exchange(db, user)
+            return exchange.place_order(symbol, quantity, side, order_type, limit_price, token)
         except Exception as e:
-            logger.error(f"Error placing order: {e}")
-            return {"success": False, "error": str(e)}
+            logger.error(f"ExchangeClient place_order error: {e}")
+            return {"error": str(e)}
+
+    def get_order_status(self, db: Session, user: User, order_id: str, token: str = "") -> Dict[str, Any]:
+        """Retrieves status for a specific order."""
+        try:
+            exchange = get_exchange(db, user)
+            return exchange.get_order_status(order_id, token)
+        except Exception as e:
+            logger.error(f"ExchangeClient get_order_status error: {e}")
+            return {"error": str(e)}
 
 exchange_client = ExchangeClient()

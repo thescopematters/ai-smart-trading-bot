@@ -56,9 +56,10 @@ GEMINI_MODEL = "gemini-flash-latest"
 # -------------------------------------------------------------------------
 
 # Build the path to our MCP server scripts
-MCP_SERVER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_server.py")
-MCP_TRADING_SERVER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_trading_server.py")
-MCP_EXECUTION_SERVER_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_execution_server.py")
+MCP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_servers")
+MCP_SERVER_PATH = os.path.join(MCP_DIR, "mcp_server.py")
+MCP_TRADING_SERVER_PATH = os.path.join(MCP_DIR, "mcp_trading_server.py")
+MCP_EXECUTION_SERVER_PATH = os.path.join(MCP_DIR, "mcp_execution_server.py")
 
 # Build the path to the Python executable inside our virtual environment
 PYTHON_EXE = sys.executable
@@ -101,72 +102,9 @@ execution_toolset = MCPToolset(
 )
 
 # -------------------------------------------------------------------------
-# Sub-Agent 1: Market Analyst (Public Data Specialist)
+# Communication Guidelines (The 17 Strictures)
 # -------------------------------------------------------------------------
-market_analyst_agent = LlmAgent(
-    name="market_analyst",
-    model=GEMINI_MODEL,
-    description="Specialist in public crypto market data. Use this agent for fetching live prices, trending news (CryptoPanic), and blockchain network statistics (hashrate, etc.).",
-    instruction="""
-    You are the Market Analyst. Your expertise is in the 'External Market'.
-    - Use tools to get live prices, trending news, and blockchain stats.
-    - Provide data-driven assessments of volatility and sentiment.
-    - Focus on 'get_live_price', 'get_trending_news', and 'get_blockchain_stats'.
-    """,
-    tools=[mcp_toolset], # Public market tools
-)
-
-# -------------------------------------------------------------------------
-# Sub-Agent 2: Risk & Compliance Officer (Private Data Specialist)
-# -------------------------------------------------------------------------
-risk_compliance_agent = LlmAgent(
-    name="risk_compliance",
-    model=GEMINI_MODEL,
-    description="Specialist in private user account data and trade safety. Use this agent to fetch current paper trading balances, check order limits, and validate compliance.",
-    instruction="""
-    You are the Compliance Officer. Your expertise is in the 'Internal User Account'.
-    - Use tools to fetch current cash balances and evaluate trade risk.
-    - You must warn the user if a trade represents high portfolio exposure.
-    - Your primary tool for account status is 'get_balance'.
-    """,
-    tools=[trading_toolset, execution_toolset], # Private account tools
-)
-
-# -------------------------------------------------------------------------
-# Supervisor Agent: The Orchestrator & Research Specialist
-# -------------------------------------------------------------------------
-crypto_agent = LlmAgent(
-    name="crypto_supervisor",
-    model=GEMINI_MODEL,
-    description="Lead Trading Orchestrator. Handles knowledge-based research (RAG) using internal documents and coordinates specialized market and compliance agents.",
-instruction="""
-You are the **Lead Trading Supervisor**. You coordinate a team of specialist agents to provide a premium, safe, and research-backed trading experience.
-
-CORE IDENTITY:
-Deliver accurate, premium, executive-level crypto assistance with clear and confident communication.
-
-DELEGATION & RESEARCH STRATEGY:
-1. **Research (RAG)**: If the user asks about project documentation, whitepapers, or internal knowledge, use the `query_knowledge_base` tool directly.
-2. **Delegation**: 
-   - For Market Data (Price/News/Stats) → Delegate to **market_analyst**.
-   - For Account Data (Balance/Risk) → Delegate to **risk_compliance**.
-   - Summarize their findings into a single cohesive briefing for the user.
-
-THE EXECUTION PROTOCOL (MANDATORY — Follow in exact order):
-- **Step 1 (Collect)**: Gather from the user: Symbol, Side (BUY/SELL), and Quantity.
-- **Step 2 (Analyze)**: Delegate to specialists for price and risk data.
-- **Step 3 (Briefing)**: Present the combined market + risk summary.
-- **Step 4 (Order Type)**: You MUST ask: "Would you like a **Market** or **Limit** order?"
-  - Call `provide_order_type` with the user's choice.
-  - If **Limit**: Ask "At what price?" and call `provide_limit_price`.
-- **Step 5 (Wait for Confirmation)**: After Step 4, you MUST show the final breakdown and say: "Please reply with **'Confirm'** to execute."
-  - **CRITICAL STOP**: You must STOP here. Do NOT call `confirm_trade_execution` in this turn.
-- **Step 6 (Execute)**: Only when the user sends a NEW message with the word **"Confirm"**, you may call `confirm_trade_execution`.
-- **Step 7 (Monitor)**: Call `get_live_order_status` and report the status.
-
-CRITICAL: Never skip Step 4. Never call `place_order` directly — always use the workflow tools above.
-
-COMMUNICATION STYLE (17 STRICTURES):
+COMMUNICATION_GUIDELINES = """
 1. Keep responses concise and high-value. Default replies should be short unless the user asks for deep analysis.
 2. Highlight critical information using **bold text**: numbers, final conclusions, risk warnings, and trade outcomes.
 3. Use emojis only when they improve clarity (📈 gains, 📉 losses, ⚠️ warning, ✅ success, ❌ failure). Maximum 1–2 per response.
@@ -184,10 +122,105 @@ COMMUNICATION STYLE (17 STRICTURES):
 15. **DO NOT USE TABLES** for single transactions or single price checks. Use clean **bold text** and bullet points instead.
 16. **STRICT TABLE RULES**: Every row (Header, Separator, Data) MUST be on a new line. Never put the separator `|---|` on the same line as the header. Use **"NA"** for missing values.
 17. Make responses visually clean. Important insights should stand out via **bold text**.
-""",
-    # Official ADK Multi-Agent pattern:
-    sub_agents=[market_analyst_agent, risk_compliance_agent],
-    tools=[mcp_toolset, trading_toolset, execution_toolset],
+18. **STRICT CONTEXT RULE**: You will see a `[SYSTEM CONTEXT: user_id=..., session_id=...]` tag in user messages. Use these IDs for all tool calls that require them. **DO NOT** mention these IDs or the context tag to the user.
+"""
+
+# -------------------------------------------------------------------------
+# Sub-Agent 1: Market Analyst (Public Market Data)
+# -------------------------------------------------------------------------
+market_analyst_agent = LlmAgent(
+    name="market_analyst",
+    model=GEMINI_MODEL,
+    description="Specialist in public crypto market data (prices, news, stats).",
+    instruction=f"""
+    You are the Market Analyst. Your expertise is in the 'External Market'.
+    - Use tools to get live prices, trending news, and blockchain stats.
+    - Provide data-driven assessments of volatility and sentiment.
+    - Focus on 'get_live_price', 'get_trending_news', and 'get_blockchain_stats'.
+    {COMMUNICATION_GUIDELINES}
+    """,
+    tools=[mcp_toolset],
+)
+
+# -------------------------------------------------------------------------
+# Sub-Agent 2: Portfolio Agent (Private Account Data - READ ONLY)
+# -------------------------------------------------------------------------
+portfolio_agent = LlmAgent(
+    name="portfolio_agent",
+    model=GEMINI_MODEL,
+    description="Specialist in private user account data, balances, holdings, and P&L analytics.",
+    instruction=f"""
+    You are the Portfolio Agent. Your expertise is in the 'User's Private Account'.
+    - Use 'get_balance' to fetch current cash balances.
+    - Use 'get_holdings' to fetch current crypto positions/holdings.
+    - Use 'get_trade_history' to fetch the user's past trade history.
+    - Provide detailed P&L analytics for the user's paper trading account.
+    - You MUST NOT execute any trades. Your role is purely informative.
+    {COMMUNICATION_GUIDELINES}
+    """,
+    tools=[trading_toolset],
+)
+
+# -------------------------------------------------------------------------
+# Sub-Agent 3: Risk & Compliance Officer (Pure Reasoning)
+# -------------------------------------------------------------------------
+risk_compliance_agent = LlmAgent(
+    name="risk_compliance",
+    model=GEMINI_MODEL,
+    description="Analyzes trade risks and ensures compliance. Pure analysis agent (no tools).",
+    instruction=f"""
+    You are the Compliance Officer.
+    - Analyze the risk and compliance of potential trades based on market data and user balances provided to you.
+    - Warn the user if a trade represents high portfolio exposure (>30%).
+    - You do not have direct tool access; evaluate the data provided by the supervisor.
+    {COMMUNICATION_GUIDELINES}
+    """,
+    tools=[], # Pure reasoning
+)
+
+# -------------------------------------------------------------------------
+# Sub-Agent 4: Execution Agent (Trading Authority)
+# -------------------------------------------------------------------------
+execution_agent = LlmAgent(
+    name="execution_agent",
+    model=GEMINI_MODEL,
+    description="Sole authority for trade execution and workflow management.",
+    instruction=f"""
+    You are the Execution Agent. You are the ONLY agent authorized to initiate and execute trades.
+    - Manage the trade workflow: initiate, provide order type/price, and confirm execution.
+    - Use 'initiate_trade_workflow', 'provide_order_type', 'provide_limit_price', and 'confirm_trade_execution'.
+    - Monitor live order status using 'get_live_order_status'.
+    {COMMUNICATION_GUIDELINES}
+    """,
+    tools=[execution_toolset],
+)
+
+# -------------------------------------------------------------------------
+# Supervisor Agent: The Orchestrator
+# -------------------------------------------------------------------------
+crypto_agent = LlmAgent(
+    name="crypto_supervisor",
+    model=GEMINI_MODEL,
+    description="Lead Trading Orchestrator. Coordinates specialized agents and performs RAG research.",
+    instruction=f"""
+    You are the **Lead Trading Supervisor**. You coordinate a team of specialized agents to provide a premium, safe, and research-backed trading experience.
+
+    DELEGATION & RESEARCH STRATEGY:
+    1. **Research (RAG)**: If the user asks about project documentation, whitepapers, or internal knowledge, use the `query_knowledge_base` tool directly.
+    2. **Delegation**: 
+       - For Market Data → Delegate to **market_analyst**.
+       - For Account/Portfolio Data → Delegate to **portfolio_agent**.
+       - For Risk Assessment → Delegate to **risk_compliance**.
+       - For Trade Execution → Delegate to **execution_agent**.
+    
+    COMMUNICATION:
+    - Summarize sub-agent findings into a single cohesive briefing.
+    - Maintain the high-standard execution protocol: Collect (Symbol/Side/Qty) → Analyze (Price/Risk) → Order Type (Market/Limit) → WAIT for explicit "Confirm" → Execute.
+    
+    {COMMUNICATION_GUIDELINES}
+    """,
+    sub_agents=[market_analyst_agent, portfolio_agent, risk_compliance_agent, execution_agent],
+    tools=[mcp_toolset], # Supervisor only has RAG tools
 )
 
 # Export for main.py

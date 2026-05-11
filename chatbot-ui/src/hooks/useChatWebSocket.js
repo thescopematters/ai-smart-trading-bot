@@ -76,13 +76,17 @@ export const useChatWebSocket = (url, sessionId, userPrefix = 'guest', isActive 
 
         socket.onclose = () => {
             setIsConnected(false);
+            setIsTyping(false); // Clear processing state on disconnect
             // Auto-reconnect only if this socket is still the current one
             if (socketRef.current === socket && sessionId) {
                 reconnectTimeoutRef.current = setTimeout(() => connect(), 3000);
             }
         };
 
-        socket.onerror = (err) => console.error('[WS] Error:', err);
+        socket.onerror = (err) => {
+            console.error('[WS] Error:', err);
+            setIsTyping(false); // Clear processing state on error
+        };
 
         socket.onmessage = (event) => {
             if (socketRef.current !== socket) return;
@@ -162,6 +166,11 @@ export const useChatWebSocket = (url, sessionId, userPrefix = 'guest', isActive 
                     break;
                 }
 
+                case 'response.complete': {
+                    setIsTyping(false);
+                    break;
+                }
+
                 case 'session.end': {
                     setIsSessionEnd(true);
                     setIsTyping(false);
@@ -189,6 +198,11 @@ export const useChatWebSocket = (url, sessionId, userPrefix = 'guest', isActive 
                 type: 'visibility', 
                 is_active: isActive && !document.hidden 
             }));
+        }
+        // If the user navigates away from the chat (e.g. to history), 
+        // we should clear local processing states to avoid UI glitches on return.
+        if (!isActive) {
+            setIsTyping(false);
         }
     }, [isActive, isConnected]);
 
