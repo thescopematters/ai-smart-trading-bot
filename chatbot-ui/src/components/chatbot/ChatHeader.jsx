@@ -5,7 +5,7 @@ import cryptobotAvatar from '../../assets/cryptobot_avatar_cute.png';
 
 const ChatHeader = ({ onClose, onOpenHistory, status = 'Online', showHistoryBtn = true, onMaximize, isMaximized }) => {
     return (
-        <div className="flex items-center justify-between p-4 px-6 border-b border-indigo-50/50 bg-white/40 backdrop-blur-md">
+        <div className="flex items-center justify-between p-3 px-4 sm:p-4 sm:px-6 border-b border-indigo-50/50 bg-white/40 backdrop-blur-md">
             <div className="flex items-center gap-3">
                 {onOpenHistory && showHistoryBtn && (
                     <button onClick={onOpenHistory} className="p-2 -ml-2 rounded-full hover:bg-slate-100 transition text-slate-400">
