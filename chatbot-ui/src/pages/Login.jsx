@@ -168,7 +168,7 @@ const Login = () => {
                                     value={formData.displayName}
                                     onChange={handleInputChange}
                                     placeholder="Enter your full name"
-                                    className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
+                                    className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-base text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
                                     required
                                 />
                             </div>
@@ -184,7 +184,7 @@ const Login = () => {
                                 value={formData.email}
                                 onChange={handleInputChange}
                                 placeholder="name@example.com"
-                                className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
+                                className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-base text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
                                 required
                             />
                         </div>
@@ -200,7 +200,7 @@ const Login = () => {
                                     value={formData.password}
                                     onChange={handleInputChange}
                                     placeholder="••••••••"
-                                    className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all pr-12"
+                                    className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-base text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all pr-12"
                                     required
                                 />
                                 <button

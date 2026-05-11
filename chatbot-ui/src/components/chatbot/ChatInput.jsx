@@ -111,7 +111,7 @@ const ChatInput = ({ onSendMessage, onAudioChunk, onRecordingStop, currentTransc
     };
 
     return (
-        <form onSubmit={handleSubmit} className="p-4 bg-white/40 backdrop-blur-xl relative border-t border-white/40 shadow-inner">
+        <form onSubmit={handleSubmit} className="p-4 pb-[max(1rem,env(safe-area-inset-bottom))] bg-white/40 backdrop-blur-xl relative border-t border-white/40 shadow-inner">
             <div className={`flex items-end gap-3 bg-white rounded-3xl p-2 relative transition-all duration-500 ease-out ${isListening
                 ? 'shadow-[0_0_40px_-5px_rgba(139,92,246,0.3)] border-violet-100 scale-[1.01]'
                 : 'shadow-xl shadow-indigo-500/10 border border-indigo-50'
@@ -167,7 +167,7 @@ const ChatInput = ({ onSendMessage, onAudioChunk, onRecordingStop, currentTransc
                             onChange={handleChange}
                             onKeyDown={handleKeyDown}
                             placeholder="Message Crypto AI..."
-                            className={`w-full bg-transparent border-0 px-2 py-3 text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-0 focus:ring-offset-0 focus:border-0 outline-none transition-opacity duration-300 resize-none scrollbar-hide max-h-[200px] ${isListening || isProcessing ? 'opacity-60' : 'opacity-100'}`}
+                            className={`w-full bg-transparent border-0 px-2 py-3 text-base text-slate-700 placeholder-slate-400 focus:outline-none focus:ring-0 focus:ring-offset-0 focus:border-0 outline-none transition-opacity duration-300 resize-none scrollbar-hide max-h-[200px] ${isListening || isProcessing ? 'opacity-60' : 'opacity-100'}`}
                             style={{ WebkitTapHighlightColor: 'transparent', boxShadow: 'none' }}
                             disabled={isListening || isProcessing}
                         />

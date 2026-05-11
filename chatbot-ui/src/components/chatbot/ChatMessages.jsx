@@ -41,11 +41,11 @@ const ChatMessages = ({ messages, isTyping }) => {
     }, []);
 
     return (
-        <div className="flex-1 relative overflow-hidden flex flex-col">
+        <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
             <div 
                 ref={scrollContainerRef}
                 onScroll={handleScroll}
-                className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar"
+                className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar overscroll-contain"
             >
                 {messages.map((msg) => (
                     <div

@@ -20,7 +20,7 @@ import {
 import cryptobotAvatar from "../../assets/cryptobot_avatar_cute.png";
 import { useToast } from "../../context/ToastContext";
 import ConfirmModal from "../../ui/ConfirmModal";
-import { api } from '../../services/api';
+import { api } from "../../services/api";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -164,8 +164,8 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
   }, [activeSessionId, isGuest, userPrefix]);
 
   // ── WebSocket ───────────────────────────────────────────────────────────
-  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
-  const WS_BASE = API_BASE.replace(/^http/, 'ws');
+  const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+  const WS_BASE = API_BASE.replace(/^http/, "ws");
   const wsUrl = `${WS_BASE}/ws/chat`;
 
   const chatControls = useChatWebSocket(
@@ -177,17 +177,17 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
   const { messages } = chatControls;
 
   // ── Default questions ───────────────────────────────────────────────────
-    const fetchDefaultQuestions = useCallback(async () => {
+  const fetchDefaultQuestions = useCallback(async () => {
     try {
-        const res = await api.get('/api/questions');
-        if (res.ok) {
+      const res = await api.get("/api/questions");
+      if (res.ok) {
         const data = await res.json();
         setDefaultQuestions(data);
-        }
+      }
     } catch {
-        // silent fail
+      // silent fail
     }
-    }, []);
+  }, []);
 
   useEffect(() => {
     fetchDefaultQuestions();
@@ -212,7 +212,7 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
 
     setLoadingSessions(true);
     try {
-      const res = await api.get('/api/sessions', token);
+      const res = await api.get("/api/sessions", token);
       if (!res.ok) return;
       const data = await res.json();
       setSessions(
@@ -339,7 +339,7 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
           /* ── HISTORY LIST VIEW ── */
           <div className="flex flex-col w-full h-full bg-slate-50/40 backdrop-blur-md">
             {/* History List View header - find this section and update */}
-            <div className="flex items-center justify-between p-6 border-b border-indigo-50 bg-white/40">
+            <div className="flex items-center justify-between p-4 sm:p-6 border-b border-indigo-50 bg-white/40">
               <h2 className="text-xl font-bold text-slate-800 tracking-wide">
                 Your Chats
               </h2>
@@ -395,7 +395,7 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
                     <div
                       key={session.id}
                       onClick={() => handleSelectSession(session.id)}
-                      className={`group flex items-center gap-4 p-4 cursor-pointer bg-white/60 hover:bg-white border border-white/40 rounded-2xl shadow-sm hover:shadow-md transition-all relative ${session.isUnread ? "ring-1 ring-indigo-500/20 bg-indigo-50/5" : ""}`}
+                      className={`group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 cursor-pointer bg-white/60 hover:bg-white border border-white/40 rounded-2xl shadow-sm hover:shadow-md transition-all relative ${session.isUnread ? "ring-1 ring-indigo-500/20 bg-indigo-50/5" : ""}`}
                     >
                       <div className="relative shrink-0">
                         <div className="w-12 h-12 rounded-full overflow-hidden shadow-inner bg-white border border-slate-100">
@@ -436,7 +436,7 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
                                   className={`p-1 rounded-full transition-all ${
                                     menuOpenId === session.id
                                       ? "opacity-100 bg-slate-200 text-slate-600"
-                                      : "hover:bg-slate-200 text-slate-400 opacity-0 group-hover:opacity-100"
+                                      : "hover:bg-slate-200 text-slate-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                                   }`}
                                 >
                                   <MoreVertical size={14} />
@@ -566,7 +566,7 @@ const ActiveChat = ({
           ) : (
             <>
               {messages.length <= 1 && defaultQuestions.length > 0 && (
-                <div className="px-4 pb-2 grid grid-cols-2 gap-2">
+                <div className="px-3 sm:px-4 pb-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {defaultQuestions.map((q, i) => (
                     <button
                       key={q.id || i}

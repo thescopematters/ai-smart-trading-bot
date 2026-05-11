@@ -34,9 +34,10 @@ const ChatWidget = () => {
             {/* Small popup - mobile full width, desktop fixed */}
             {isOpen && !isMaximized && (
                 <div className="fixed z-40 overflow-hidden border border-slate-200 flex flex-col bg-white
-                    bottom-0 left-0 right-0 h-[85vh] rounded-t-2xl
-                    sm:bottom-20 sm:left-auto sm:right-6 sm:w-[420px] sm:h-[600px] sm:rounded-2xl
-                    shadow-2xl shadow-indigo-900/20">
+                    bottom-0 left-0 right-0 h-[92dvh] rounded-t-3xl
+                    sm:bottom-24 sm:left-auto sm:right-6 sm:w-[420px] sm:h-[600px] sm:rounded-2xl
+                    shadow-2xl shadow-indigo-900/20"
+     style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}>
                     <ChatbotPanel onMaximize={toggleMaximize} isMaximized={false} />
                 </div>
             )}
@@ -45,8 +46,8 @@ const ChatWidget = () => {
             {isOpen && isMaximized && (
                 <>
                     <div className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm" onClick={handleClose} />
-                    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-8">
-                        <div className="w-full max-w-5xl h-[95vh] sm:h-[82vh] rounded-2xl shadow-2xl overflow-hidden border border-slate-200 flex flex-col bg-white mt-4">
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-8">
+                        <div className="w-full max-w-5xl h-[100dvh] sm:h-[82vh] sm:rounded-2xl rounded-none shadow-2xl overflow-hidden border border-slate-200 flex flex-col bg-white sm:mt-4">
                             <ChatbotPanel onMaximize={toggleMaximize} isMaximized={true} />
                         </div>
                     </div>
