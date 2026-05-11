@@ -26,7 +26,12 @@ Paper Trading Features:
 
 from fastmcp import FastMCP
 import os
+import sys
 import time
+
+# Ensure parent directory is in path so we can import 'database' and 'services'
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import requests
 import logging
 import json
@@ -239,6 +244,15 @@ def get_blockchain_stats(chain: str = "bitcoin") -> dict:
     except Exception as e:
         logger.error(f"❌ [TOOL ERROR] Chain Stats failed: {e}")
         return {"error": "Blockchain network data is currently unreachable."}
+
+from services.market_analyst import market_analyst
+
+@mcp.tool()
+def get_market_analysis(symbol: str) -> dict:
+    """
+    Market Analyst: Get professional price, trend, and sentiment analysis for a coin.
+    """
+    return market_analyst.get_market_insight(symbol)
 
 @mcp.tool()
 def query_knowledge_base(query: str) -> str:
