@@ -13,14 +13,6 @@ from exchange_gateway.exchange_router import get_exchange
 mcp = FastMCP("Crypto-Trading")
 logger = logging.getLogger("MCPTradingServer")
 
-logging.basicConfig(level=logging.INFO)
-file_handler = logging.FileHandler(
-    os.path.join(os.path.dirname(os.path.abspath(__file__)), "../mcp_trading.log")
-)
-file_handler.setFormatter(logging.Formatter("%(asctime)s - %(levelname)s - %(message)s"))
-logger.addHandler(file_handler)
-logger.info("🚀 MCP Trading Server starting up...")
-
 @mcp.tool()
 def get_balance(user_id: str) -> dict:
     """
