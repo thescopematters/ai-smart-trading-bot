@@ -21,7 +21,7 @@ import cryptobotAvatar from "../../assets/cryptobot_avatar_cute_1.png";
 import { useToast } from "../../context/ToastContext";
 import ConfirmModal from "../../ui/ConfirmModal";
 import { api } from "../../services/api";
-import { useLoader } from '../../context/LoaderContext';
+import { useLoader } from "../../context/LoaderContext";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -55,7 +55,10 @@ const newSessionId = () =>
 const HistorySkeleton = () => (
   <div className="flex flex-col gap-3 p-4">
     {[1, 2, 3, 4, 5].map((i) => (
-      <div key={i} className="flex items-center gap-4 p-4 bg-white/60 border border-white/40 rounded-2xl animate-pulse">
+      <div
+        key={i}
+        className="flex items-center gap-4 p-4 bg-white/60 border border-white/40 rounded-2xl animate-pulse"
+      >
         <div className="w-12 h-12 rounded-full bg-slate-100 shadow-inner" />
         <div className="flex-1 space-y-2">
           <div className="h-4 bg-indigo-500/10 rounded w-1/3" />
@@ -216,7 +219,7 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
   // ── Default questions ───────────────────────────────────────────────────
   const fetchDefaultQuestions = useCallback(async () => {
     try {
-      const res = await api.get('/api/questions');
+      const res = await api.get("/api/questions");
       if (res.ok) {
         const data = await res.json();
         setDefaultQuestions(data);
@@ -263,7 +266,7 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
           const isUnread =
             s.last_message_at > viewedAt ||
             localStorage.getItem(`crypto_unread_${userPrefix}_${s.id}`) ===
-            "true";
+              "true";
 
           return {
             id: s.id,
@@ -307,7 +310,7 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
     } catch {
       toast({ type: "error", message: "Something went wrong." });
     } finally {
-        setIsLoading(false);
+      setIsLoading(false);
     }
   };
 
@@ -380,9 +383,12 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
           <div className="flex flex-col w-full h-full bg-slate-50/40 backdrop-blur-md">
             {/* History List View header - find this section and update */}
             <div className="flex items-center justify-between p-4 sm:p-4 border-b border-slate-700 bg-[#072042]">
-              <h2 className="text-xl font-bold text-white tracking-wide">
-                Your Chats
-              </h2>
+              <div className="flex flex-col">
+                <h2 className="text-xl font-bold text-white tracking-wide">
+                  Chats
+                </h2>
+                <p className="text-xs text-white/70">Recent chat history</p>
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={startNewChat}
@@ -453,7 +459,7 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
                           </h3>
                           <div className="flex items-center gap-2">
                             <span
-                              className={`text-[12px] ${session.isUnread ? "font-bold text-[#072042]" : "font-medium text-slate-600"}`}
+                              className={`text-[12px] ${session.isUnread ? "font-semibold text-black" : "font-medium text-slate-700"}`}
                             >
                               {session.time}
                             </span>
@@ -468,7 +474,8 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
                                         : session.id,
                                     );
                                   }}
-                                  className={`p-1 rounded-full transition-all ${menuOpenId === session.id
+                                  className={`p-1 rounded-full transition-all ${
+                                    menuOpenId === session.id
                                       ? "opacity-100 bg-slate-200 text-slate-600"
                                       : "hover:bg-slate-200 text-slate-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                                   }`}
@@ -494,13 +501,7 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
                         <p
                           className={`text-sm truncate ${session.isUnread ? "text-slate-900 font-semibold" : "text-slate-600"}`}
                         >
-                          {session.isEnded ? (
-                            <span className="text-slate-900 font-semibold text-xs uppercase tracking-tight">
-                              Chat has ended
-                            </span>
-                          ) : (
-                            session.preview
-                          )}
+                          {session.preview || "No messages yet"}
                         </p>
                       </div>
                     </div>
@@ -572,13 +573,13 @@ const ActiveChat = ({
       />
 
       {!isConnected ? (
-            <div className="flex-1 flex items-center justify-center bg-white">
-                <div className="flex flex-col items-center gap-3">
-                    <div className="w-10 h-10 rounded-full border-4 border-[#072042]/20 border-t-[#072042] animate-spin" />
-                    <p className="text-sm text-slate-400 font-medium">Connecting...</p>
-                </div>
-            </div>
-        ) : (
+        <div className="flex-1 flex items-center justify-center bg-white">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-10 h-10 rounded-full border-4 border-[#072042]/20 border-t-[#072042] animate-spin" />
+            <p className="text-sm text-slate-400 font-medium">Connecting...</p>
+          </div>
+        </div>
+      ) : (
         <div className="flex-1 flex flex-col overflow-hidden">
           <ChatMessages messages={messages} isTyping={isTyping} />
 

@@ -7,6 +7,9 @@ import Login from './pages/Login';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 const Home = () => {
+    const { user } = useAuth();
+    const showChatPrompt = user && !user.is_guest;
+
     return (
         <div className="h-[100dvh] w-screen bg-slate-50 overflow-hidden flex flex-col">
             <Navbar />
@@ -19,9 +22,12 @@ const Home = () => {
                         Your AI-powered crypto assistant. Get real-time prices, 
                         portfolio insights, and market analysis.
                     </p>
-                    <p className="text-[#072042] text-xs sm:text-sm font-medium animate-pulse">
-                        💬 Click the chat bubble to get started →
-                    </p>
+                    {/* Show only for logged-in, non-guest users */}
+                    {showChatPrompt && (
+                        <p className="text-[#072042] text-xs sm:text-sm font-medium animate-pulse">
+                            💬 Click the chat bubble to get started →
+                        </p>
+                    )}
                 </div>
             </div>
         </div>
