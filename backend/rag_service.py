@@ -138,39 +138,76 @@ def _read_pdf(path):
         return ""
 
 def _add_text_to_db(source_name, text):
+    # Recursive Character Splitter logic
+    # Splits by double newline, then single newline, then space
+    separators = ["\n\n", "\n", " ", ""]
     chunk_size = 1000
     overlap = 100
 
-    # Large docs → bad embeddings
-    # Chunking improves search accuracy
-    # Overlap preserves context
+    def split_text(text, separators, chunk_size, overlap):
+        if not separators:
+            return [text[i:i+chunk_size] for i in range(0, len(text), chunk_size - overlap)]
+        
+        sep = separators[0]
+        splits = text.split(sep)
+        final_chunks = []
+        current_chunk = ""
+        
+        for s in splits:
+            if len(current_chunk) + len(s) + len(sep) <= chunk_size:
+                current_chunk += (sep if current_chunk else "") + s
+            else:
+                if current_chunk:
+                    final_chunks.append(current_chunk)
+                
+                # If a single split is still too big, go to next separator
+                if len(s) > chunk_size:
+                    final_chunks.extend(split_text(s, separators[1:], chunk_size, overlap))
+                    current_chunk = ""
+                else:
+                    current_chunk = s
+        
+        if current_chunk:
+            final_chunks.append(current_chunk)
+        return final_chunks
+
+    chunks = split_text(text, separators, chunk_size, overlap)
+    metadatas = [{"source": source_name} for _ in chunks]
+    ids = [f"{source_name}_{i}" for i in range(len(chunks))]
     
-    chunks = []
-    metadatas = []
-    ids = []
-    
-    start = 0
-    while start < len(text):
-        end = start + chunk_size
-        chunk = text[start:end]
-        
-        chunks.append(chunk)
-        metadatas.append({"source": source_name})
-        ids.append(f"{source_name}_{start}")
-        
-        start += (chunk_size - overlap)
-        
     if chunks:
         _collection.add(documents=chunks, metadatas=metadatas, ids=ids)
+        print(f"RAG: Indexed {source_name} ({len(chunks)} smart chunks)")
 
-        # Behind the scenes:
-        # Text → embeddings
-        # Embeddings → vector DB
-        # Metadata stored alongside
-        
-        print(f"RAG: Indexed {source_name} ({len(chunks)} chunks)")
+def get_sync_status():
+    """Calculates the percentage of files in ./data that are indexed."""
+    global _collection
+    if _collection is None:
+        initialize_rag()
+    
+    if not os.path.exists(DATA_FOLDER):
+        return {"percent": 0, "total_files": 0, "indexed_files": 0}
+    
+    files = [f for f in os.listdir(DATA_FOLDER) if f.lower().endswith(('.pdf', '.txt', '.md'))]
+    if not files:
+        return {"percent": 100, "total_files": 0, "indexed_files": 0}
+    
+    indexed_sources = set()
+    # This is a bit slow for massive DBs, but fine for this scale
+    # Better: store indexed filenames in a local cache or use collection.get() with where
+    for filename in files:
+        res = _collection.get(where={"source": filename}, limit=1)
+        if res and res['ids']:
+            indexed_sources.add(filename)
+            
+    percent = int((len(indexed_sources) / len(files)) * 100)
+    return {
+        "percent": percent,
+        "total_files": len(files),
+        "indexed_files": len(indexed_sources)
+    }
 
-def search_knowledge_base(query: str, n_results: int = 3) -> str:    # This is what runs when a user asks a question.
+def search_knowledge_base(query: str, n_results: int = 3) -> str:
     """Searches the vector DB for relevant context."""
     if _collection is None:
         initialize_rag()

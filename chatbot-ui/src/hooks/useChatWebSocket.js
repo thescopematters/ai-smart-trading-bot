@@ -251,6 +251,12 @@ export const useChatWebSocket = (url, sessionId, userPrefix = 'guest', isActive 
             socketRef.current.send(JSON.stringify({ type: 'user_typing' }));
     };
 
+    const reportActivity = useCallback(() => {
+        if (socketRef.current?.readyState === WebSocket.OPEN) {
+            socketRef.current.send(JSON.stringify({ type: 'activity' }));
+        }
+    }, []);
+
     return {
         isConnected,
         messages,
@@ -263,5 +269,6 @@ export const useChatWebSocket = (url, sessionId, userPrefix = 'guest', isActive 
         sendAudioChunk,
         sendTranscribeRequest,
         sendTypingIndicator,
+        reportActivity,
     };
 };

@@ -14,32 +14,32 @@ mcp = FastMCP("Crypto-Execution")
 logger = logging.getLogger("MCPExecutionServer")
 
 @mcp.tool()
-def initiate_trade_workflow(symbol: str, quantity: float, side: str, session_id: str, user_id: str) -> str:
+async def initiate_trade_workflow(symbol: str, quantity: float, side: str, session_id: str, user_id: str) -> str:
     """
     Initiate a new trade workflow. Performs risk assessment and asks for order type.
     """
     try:
-        return trading_workflow.initiate_trade(session_id, user_id, symbol, quantity, side)
+        return await trading_workflow.initiate_trade(session_id, user_id, symbol, quantity, side)
     except Exception as e:
         logger.error(f"Error in initiate_trade_workflow: {e}")
         return f"Error initiating trade: {str(e)}"
 
 @mcp.tool()
-def provide_order_type(order_type: str, session_id: str) -> str:
+async def provide_order_type(order_type: str, session_id: str) -> str:
     """
     Provide the order type (MARKET or LIMIT) for the active trade.
     """
-    return trading_workflow.process_order_type(session_id, order_type)
+    return await trading_workflow.process_order_type(session_id, order_type)
 
 @mcp.tool()
-def provide_limit_price(limit_price: float, session_id: str) -> str:
+async def provide_limit_price(limit_price: float, session_id: str) -> str:
     """
     Provide the limit price for a LIMIT order.
     """
-    return trading_workflow.process_limit_price(session_id, limit_price)
+    return await trading_workflow.process_limit_price(session_id, limit_price)
 
 @mcp.tool()
-def confirm_trade_execution(session_id: str, user_id: str) -> str:
+async def confirm_trade_execution(session_id: str, user_id: str) -> str:
     """
     Final trigger to execute the trade after user confirmation.
     """
@@ -48,7 +48,7 @@ def confirm_trade_execution(session_id: str, user_id: str) -> str:
             user = db.query(User).filter(User.id == user_id).first()
             if not user:
                 return "Error: User not found."
-            return trading_workflow.confirm_and_execute(session_id, db, user)
+            return await trading_workflow.confirm_and_execute(session_id, db, user)
     except Exception as e:
         logger.error(f"Error in confirm_trade_execution: {e}")
         return f"Execution error: {str(e)}"

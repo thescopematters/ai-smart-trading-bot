@@ -14,7 +14,7 @@ mcp = FastMCP("Crypto-Trading")
 logger = logging.getLogger("MCPTradingServer")
 
 @mcp.tool()
-def get_balance(user_id: str) -> dict:
+async def get_balance(user_id: str) -> dict:
     """
     Get the current paper trading cash balance for a user.
     """
@@ -39,7 +39,7 @@ def get_balance(user_id: str) -> dict:
         return {"error": str(e)}
 
 @mcp.tool()
-def get_quote(symbol: str, quantity: float, side: str, user_id: str) -> dict:
+async def get_quote(symbol: str, quantity: float, side: str, user_id: str) -> dict:
     """
     Get a price quote and fee estimate for a potential trade.
     """
@@ -56,7 +56,7 @@ def get_quote(symbol: str, quantity: float, side: str, user_id: str) -> dict:
         return {"error": str(e)}
 
 @mcp.tool()
-def place_order(symbol: str, quantity: float, side: str, order_type: str, 
+async def place_order(symbol: str, quantity: float, side: str, order_type: str, 
                 limit_price: float = None, user_id: str = None) -> dict:
     """
     Place a paper trading order. NOTE: This tool is for direct placement.
@@ -75,7 +75,7 @@ def place_order(symbol: str, quantity: float, side: str, order_type: str,
         return {"error": str(e)}
 
 @mcp.tool()
-def get_holdings(user_id: str) -> dict:
+async def get_holdings(user_id: str) -> dict:
     """
     Get the user's current crypto holdings/positions.
     """
@@ -92,7 +92,7 @@ def get_holdings(user_id: str) -> dict:
         return {"error": str(e)}
 
 @mcp.tool()
-def get_trade_history(user_id: str, limit: int = 20) -> dict:
+async def get_trade_history(user_id: str, limit: int = 20) -> dict:
     """
     Get the user's recent trade history.
     """

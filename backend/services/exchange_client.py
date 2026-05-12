@@ -21,11 +21,12 @@ class ExchangeClient:
             return {"error": str(e)}
 
     def place_order(self, db: Session, user: User, symbol: str, quantity: float, side: str, 
-                    order_type: str, limit_price: float = None, token: str = "") -> Dict[str, Any]:
-        """Executes a trade on the active exchange."""
+                    order_type: str, limit_price: float = None, token: str = "",
+                    execution_request_id: str = None) -> Dict[str, Any]:
+        """Executes a trade on the active exchange with idempotency support."""
         try:
             exchange = get_exchange(db, user)
-            return exchange.place_order(symbol, quantity, side, order_type, limit_price, token)
+            return exchange.place_order(symbol, quantity, side, order_type, limit_price, token, execution_request_id)
         except Exception as e:
             logger.error(f"ExchangeClient place_order error: {e}")
             return {"error": str(e)}

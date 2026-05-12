@@ -10,8 +10,8 @@ class BaseExchange(ABC):
     @abstractmethod
     def place_order(self, symbol: str, quantity: float, side: str, 
                     order_type: str, limit_price: Optional[float] = None, 
-                    token: str = "") -> Dict[str, Any]:
-        """Executes a trade on the exchange."""
+                    token: str = "", execution_request_id: str = None) -> Dict[str, Any]:
+        """Executes a trade on the exchange with idempotency check."""
         pass
 
     @abstractmethod

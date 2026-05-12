@@ -60,7 +60,25 @@ class PaperExchange(BaseExchange):
 
     def place_order(self, symbol: str, quantity: float, side: str, 
                     order_type: str, limit_price: Optional[float] = None, 
-                    token: str = "") -> Dict[str, Any]:
+                    token: str = "", execution_request_id: str = None) -> Dict[str, Any]:
+        
+        # 1. Idempotency Check: prevent duplicate orders with same request ID
+        if execution_request_id:
+            existing_order = self.db.query(PaperOrder).filter(
+                PaperOrder.execution_request_id == execution_request_id
+            ).first()
+            if existing_order:
+                logger.warning(f"Returning existing order for idempotency key: {execution_request_id}")
+                return {
+                    "id": existing_order.id,
+                    "status": existing_order.status.value,
+                    "order_type": existing_order.order_type.value,
+                    "symbol": existing_order.symbol,
+                    "side": existing_order.side.value,
+                    "quantity": float(existing_order.quantity),
+                    "fill_price": float(existing_order.executed_price) if existing_order.executed_price else None
+                }
+
         symbol = symbol.upper()
         side_enum = Side.BUY if side.upper() == "BUY" else Side.SELL
         order_type_enum = OrderType.MARKET if order_type.upper() == "MARKET" else OrderType.LIMIT
@@ -133,7 +151,8 @@ class PaperExchange(BaseExchange):
                 quantity=qty,
                 executed_price=fill_price,
                 status=OrderStatus.FILLED,
-                filled_at=func.now()
+                filled_at=func.now(),
+                execution_request_id=execution_request_id
             )
             self.db.add(order)
             self.db.flush()
@@ -177,7 +196,8 @@ class PaperExchange(BaseExchange):
                 order_type=OrderType.LIMIT,
                 quantity=qty,
                 target_price=lp,
-                status=OrderStatus.PENDING
+                status=OrderStatus.PENDING,
+                execution_request_id=execution_request_id
             )
             self.db.add(order)
             self.db.commit()

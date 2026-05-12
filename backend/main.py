@@ -42,6 +42,8 @@ try:
 except ImportError:
     GeminiServerError = None
 
+from services.observability import metrics
+
 # Initialize Professional Logging
 logging.basicConfig(
     level=logging.INFO,
@@ -111,6 +113,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    start_time = time.perf_counter()
+    response = await call_next(request)
+    process_time = (time.perf_counter() - start_time) * 1000
+    metrics.record_latency("api_request", process_time)
+    return response
 
 # Apply Rate Limiter
 app.state.limiter = limiter
@@ -522,7 +532,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
     async def cold_start_routine():
         """If user opens chat but doesn't type for 15s, send exactly ONE nudge if session is empty."""
         try:
-            await asyncio.sleep(15)
+            await asyncio.sleep(60)
             # Only send if no interaction, no session end, and 0 nudges sent so far
             if not interaction_started and not session_ended and is_client_active:
                 db = SessionLocal()
@@ -553,6 +563,16 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
                         session_obj.last_message_at = datetime.now(timezone.utc)
                         db.commit()
                     
+                    # Sync with ADK In-Memory Session
+                    session = await session_service.get_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
+                    if not session:
+                        await session_service.create_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
+                        session = await session_service.get_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
+                    
+                    if session:
+                        session.history.append(types.Content(role="model", parts=[types.Part(text=msg)]))
+                        logger.info(f"Synced cold start nudge to ADK session {client_id}")
+
                     logger.info(f"Persistent Cold Start nudge sent to {client_id}")
                 db.close()
         except asyncio.CancelledError:
@@ -619,6 +639,16 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
                     db.commit()
                 else:
                     guest_nudge_count += 1
+                
+                # Sync with ADK In-Memory Session
+                session = await session_service.get_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
+                if not session:
+                    await session_service.create_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
+                    session = await session_service.get_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
+                
+                if session:
+                    session.history.append(types.Content(role="model", parts=[types.Part(text=msg)]))
+                    logger.info(f"Synced follow-up nudge to ADK session {client_id}")
                     
                 db.close()
                 logger.info(f"Follow-up nudge sent to {client_id}")
@@ -777,6 +807,18 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
                         "is_dictation": True
                     })
 
+                elif msg_type == "visibility" or msg_type == "activity":
+                    # Activity heartbeat to prevent timeout
+                    cancel_followup()
+                    cancel_cold_start()
+                    interaction_started = True
+                    # If visibility message contains is_active=true, it counts as activity
+                    if msg_type == "visibility" and not data.get("is_active", False):
+                         # If they are NOT active, don't necessarily reset the clock as strongly
+                         # but for now, we follow the logic that ANY heartbeat keeps it alive
+                         pass
+                    continue
+
                 elif msg_type == "user_typing":
                     cancel_followup()
                     cancel_cold_start()
@@ -839,6 +881,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
                                 # This is internal-only and won't be visible to the user in the UI
                                 context_prefix = f"[SYSTEM CONTEXT: user_id={db_user_id}, session_id={client_id}]\n"
                                 
+                                llm_start = time.perf_counter()
                                 async for event in runner.run_async(
                                     user_id=user_id_for_ai,
                                     session_id=client_id,
@@ -858,6 +901,9 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
                                     if chunk_text:
                                         response_text += chunk_text
                                         await safe_send({"type": "response.text_partial", "text": chunk_text})
+
+                                llm_duration = (time.perf_counter() - llm_start) * 1000
+                                metrics.record_latency("llm_response", llm_duration)
 
                                 logger.info(f"Agent reply complete: {len(response_text)} chars.")
                                 if not response_text.strip():
@@ -1007,7 +1053,8 @@ def get_admin_stats(db: Session = Depends(get_db), current_admin: AdminUser = De
         "total_users": total_users,
         "total_sessions": total_sessions,
         "total_messages": total_messages,
-        "total_documents": total_documents 
+        "total_documents": total_documents,
+        "performance": metrics.get_summary()
     }
 
 @app.get("/api/admin/users")

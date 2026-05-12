@@ -206,7 +206,31 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
     userPrefix,
     !showHistory, // isActive: suppress notifications when looking at chat
   );
-  const { messages } = chatControls;
+  const { messages, reportActivity } = chatControls;
+
+  // ── Activity Tracking ───────────────────────────────────────────────────
+  /**
+   * Track user interactions (click, scroll, mousemove) to keep the session alive.
+   * We debounce this to avoid flooding the websocket with 'activity' messages.
+   */
+  const lastReportRef = useRef(0);
+  useEffect(() => {
+    const handleInteraction = () => {
+      const now = Date.now();
+      // Report activity at most once every 30 seconds
+      if (now - lastReportRef.current > 30000) {
+        lastReportRef.current = now;
+        reportActivity();
+      }
+    };
+
+    const events = ["mousedown", "mousemove", "keydown", "scroll", "touchstart"];
+    events.forEach((name) => window.addEventListener(name, handleInteraction, { passive: true }));
+    
+    return () => {
+      events.forEach((name) => window.removeEventListener(name, handleInteraction));
+    };
+  }, [reportActivity]);
 
   // ── Default questions ───────────────────────────────────────────────────
   const fetchDefaultQuestions = useCallback(async () => {

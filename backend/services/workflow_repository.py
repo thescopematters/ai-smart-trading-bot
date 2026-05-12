@@ -25,58 +25,61 @@ class WorkflowRepository(ABC):
         pass
 
 class RedisWorkflowRepository(WorkflowRepository):
-    def get_state(self, session_id: str) -> Optional[TradeState]:
-        try:
-            if redis_manager.use_redis:
-                data = redis_manager.client.get(f"trade_state:{session_id}")
-            else:
-                data = redis_manager.client.get(f"trade_state:{session_id}")
-            if data:
-                return TradeState.parse_raw(data)
-            return None
-        except Exception as e:
-            logger.error(f"Repository get_state error: {e}")
-            return None
+    async def get_state(self, session_id: str) -> Optional[TradeState]:
+        """Async fetch of trade state."""
+        return await redis_manager.get_trade_state(session_id)
 
-    def save_state(self, state: TradeState):
+    async def save_state(self, state: TradeState):
+        """
+        Async save of trade state with optimized user-indexing.
+        Uses a Redis Set to track active workflows per user for O(1) discovery.
+        """
         try:
-            if redis_manager.use_redis:
-                redis_manager.client.set(
-                    f"trade_state:{state.session_id}",
-                    state.json(),
-                    ex=600
-                )
-            else:
-                redis_manager.client[f"trade_state:{state.session_id}"] = state.json()
+            # 1. Save the state with 24h TTL
+            await redis_manager.set_trade_state(state.session_id, state, ex=86400)
+            
+            # 2. Add to user's active workflow index
+            index_key = f"user_workflows:{state.user_id}"
+            await redis_manager.client.sadd(index_key, state.session_id)
+            await redis_manager.client.expire(index_key, 86400)
+            
         except Exception as e:
             logger.error(f"Repository save_state error: {e}")
 
-    def delete_state(self, session_id: str):
+    async def delete_state(self, session_id: str):
+        """Async deletion with index cleanup."""
         try:
-            if redis_manager.use_redis:
-                redis_manager.client.delete(f"trade_state:{session_id}")
-            else:
-                redis_manager.client.pop(f"trade_state:{session_id}", None)
+            # Fetch state first to get user_id for index cleanup
+            state = await self.get_state(session_id)
+            if state:
+                await redis_manager.client.srem(f"user_workflows:{state.user_id}", session_id)
+            
+            await redis_manager.clear_trade_state(session_id)
         except Exception as e:
             logger.error(f"Repository delete_state error: {e}")
 
-    def list_active_workflows(self, user_id: str) -> List[TradeState]:
+    async def list_active_workflows(self, user_id: str) -> List[TradeState]:
+        """
+        Optimized O(K) fetch where K is the number of active workflows for this user.
+        Replaces O(N) SCAN of all global keys.
+        """
         active = []
         try:
-            if redis_manager.use_redis:
-                for key in redis_manager.client.scan_iter("trade_state:*"):
-                    data = redis_manager.client.get(key)
-                    if data:
-                        state = TradeState.parse_raw(data)
-                        if state.user_id == user_id:
-                            active.append(state)
-            else:
-                # In-memory fallback: scan dict keys
-                for key, data in redis_manager.client.items():
-                    if key.startswith("trade_state:") and data:
-                        state = TradeState.parse_raw(data)
-                        if state.user_id == user_id:
-                            active.append(state)
+            index_key = f"user_workflows:{user_id}"
+            session_ids = await redis_manager.client.smembers(index_key)
+            
+            if not session_ids:
+                return []
+
+            # Fetch all states in the set
+            for session_id in session_ids:
+                state = await self.get_state(session_id)
+                if state:
+                    active.append(state)
+                else:
+                    # Stale index entry, cleanup
+                    await redis_manager.client.srem(index_key, session_id)
+                    
         except Exception as e:
             logger.error(f"Repository list_active_workflows error: {e}")
         return active

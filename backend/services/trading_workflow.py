@@ -10,11 +10,12 @@ from exceptions import RiskViolationError, InvalidWorkflowTransitionError
 from typing import Any
 import logging
 import asyncio
+from sqlalchemy import func as sql_func
 
 logger = logging.getLogger("TradingWorkflow")
 
 class TradingWorkflowService:
-    def initiate_trade(self, session_id: str, user_id: str, symbol: str, quantity: float, side: str, token: str = ""):
+    async def initiate_trade(self, session_id: str, user_id: str, symbol: str, quantity: float, side: str, token: str = ""):
         """
         Starts a new trade workflow.
         Performs an initial Risk Assessment before asking for order type.
@@ -39,8 +40,17 @@ class TradingWorkflowService:
             price = quote["current_price"]
             balance = quote.get("wallet", {}).get("current_balance", 0.0)
             
-            # Risk Assessment
-            risk_report = risk_engine.assess_trade(symbol, quantity, price, side, balance)
+            # Calculate Daily P&L
+            from datetime import datetime, timezone
+            from database import PaperTrade
+            today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+            daily_pnl = db.query(sql_func.sum(PaperTrade.realized_pnl)).filter(
+                PaperTrade.user_id == user_id,
+                PaperTrade.executed_at >= today_start
+            ).scalar() or 0.0
+            
+            # Risk Assessment (Pass daily_pnl)
+            risk_report = risk_engine.assess_trade(symbol, quantity, price, side, balance, daily_pnl)
             
             state = TradeState(
                 session_id=session_id,
@@ -52,7 +62,7 @@ class TradingWorkflowService:
                 risk_report=risk_report.dict()
             )
             
-            orchestrator.initiate_workflow(state)
+            await orchestrator.initiate_workflow(state)
             audit_logger.log_event("INITIATE_TRADE", session_id, user_id, state.workflow_id, payload=state.dict())
         
         # Variables are now safely accessible outside the 'with' block
@@ -62,51 +72,51 @@ class TradingWorkflowService:
         response += f"- Reason: {risk_report.reason}\n\n"
         
         if risk_report.action == "BLOCK":
-            orchestrator.transition(session_id, WorkflowState.FAILED)
+            await orchestrator.transition(session_id, WorkflowState.FAILED)
             return response + "This trade has been blocked for compliance reasons."
             
-        orchestrator.transition(session_id, WorkflowState.RISK_CHECKED)
-        orchestrator.transition(session_id, WorkflowState.AWAITING_ORDER_TYPE)
+        await orchestrator.transition(session_id, WorkflowState.RISK_CHECKED)
+        await orchestrator.transition(session_id, WorkflowState.AWAITING_ORDER_TYPE)
         
         return response + "Would you like a **Market** or **Limit** order?"
 
-    def process_order_type(self, session_id: str, order_type: str):
+    async def process_order_type(self, session_id: str, order_type: str):
         """Processes the order type and moves to confirmation step."""
-        state = orchestrator.get_active_workflow(session_id)
+        state = await orchestrator.get_active_workflow(session_id)
         if not state:
             return "No active trade found."
 
         order_type = order_type.upper()
         
         if order_type == "LIMIT":
-            orchestrator.transition(session_id, WorkflowState.AWAITING_LIMIT_PRICE, {"order_type": "LIMIT"})
+            await orchestrator.transition(session_id, WorkflowState.AWAITING_LIMIT_PRICE, {"order_type": "LIMIT"})
             return "What should be the **limit price**?"
 
         # For Market orders, move to confirmation
-        orchestrator.transition(session_id, WorkflowState.AWAITING_CONFIRMATION, {"order_type": "MARKET"})
+        await orchestrator.transition(session_id, WorkflowState.AWAITING_CONFIRMATION, {"order_type": "MARKET"})
         return f"Please confirm your **Market {state.side}** of {state.quantity} {state.symbol} at the current price. Type **'Confirm'** to execute."
 
-    def process_limit_price(self, session_id: str, limit_price: float):
+    async def process_limit_price(self, session_id: str, limit_price: float):
         """Sets limit price and moves to confirmation."""
-        orchestrator.transition(session_id, WorkflowState.AWAITING_CONFIRMATION, {"limit_price": limit_price})
-        state = orchestrator.get_active_workflow(session_id)
+        await orchestrator.transition(session_id, WorkflowState.AWAITING_CONFIRMATION, {"limit_price": limit_price})
+        state = await orchestrator.get_active_workflow(session_id)
         if not state:
             return "Trade state lost. Please start a new trade."
         return f"Please confirm your **Limit {state.side}** of {state.quantity} {state.symbol} at **${limit_price:,.2f}**. Type **'Confirm'** to execute."
 
-    def confirm_and_execute(self, session_id: str, db: Any, user: Any, token: str = ""):
+    async def confirm_and_execute(self, session_id: str, db: Any, user: Any, token: str = ""):
         """The final execution trigger after user confirmation."""
-        state = orchestrator.get_active_workflow(session_id)
+        state = await orchestrator.get_active_workflow(session_id)
         if not state or state.status != WorkflowState.AWAITING_CONFIRMATION:
             return "No order waiting for confirmation. Please start over."
 
-        orchestrator.transition(session_id, WorkflowState.EXECUTING)
+        await orchestrator.transition(session_id, WorkflowState.EXECUTING)
         
         # Execute via service (Idempotent)
         result = execution_service.execute_trade(db, user, state, state.confirmation_token, token)
         
         if result.status == "FAILED":
-            orchestrator.transition(session_id, WorkflowState.FAILED)
+            await orchestrator.transition(session_id, WorkflowState.FAILED)
             audit_logger.log_event("EXECUTION_FAILED", session_id, state.user_id, state.workflow_id, result=result.dict())
             return f"Execution Failed: {result.error}"
 
@@ -119,7 +129,7 @@ class TradingWorkflowService:
         )
         
         if result.status == "FILLED":
-            orchestrator.transition(session_id, WorkflowState.FILLED)
+            await orchestrator.transition(session_id, WorkflowState.FILLED)
         else:
             # Still pending (e.g. Limit order)
             pass 

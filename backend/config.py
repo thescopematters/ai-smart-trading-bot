@@ -25,6 +25,7 @@ class Settings:
     # --- Risk Settings ---
     MAX_ORDER_USD: float = float(os.getenv("MAX_ORDER_USD", "10000.0"))
     MAX_PORTFOLIO_EXPOSURE: float = 0.3 # 30%
+    MAX_DAILY_LOSS_USD: float = float(os.getenv("MAX_DAILY_LOSS_USD", "500.0"))
 
     # --- Security ---
     SECRET_KEY: str = os.getenv("SECRET_KEY", "your-super-secret-key")

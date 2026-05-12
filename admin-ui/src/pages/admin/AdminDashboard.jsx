@@ -23,6 +23,14 @@ const AdminDashboard = () => {
     total_sessions: 0,
     total_messages: 0,
     total_documents: 0,
+    performance: {
+      api_latency: "---",
+      api_percent: 5,
+      vector_sync: "---",
+      vector_percent: 0,
+      llm_response: "---",
+      llm_percent: 5
+    }
   });
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -163,9 +171,9 @@ const AdminDashboard = () => {
 
           <div className="space-y-6">
             {[
-              { label: "API Latency", value: "124ms", percent: 12 },
-              { label: "Vector DB Sync", value: "99.9%", percent: 99 },
-              { label: "LLM Response Time", value: "1.2s", percent: 85 },
+              { label: "API Latency", value: stats.performance?.api_latency || "---", percent: stats.performance?.api_percent || 5 },
+              { label: "Vector DB Sync", value: stats.performance?.vector_sync || "---", percent: stats.performance?.vector_percent || 0 },
+              { label: "LLM Response Time", value: stats.performance?.llm_response || "---", percent: stats.performance?.llm_percent || 5 },
             ].map((item, idx) => (
               <div key={idx} className="space-y-2">
                 <div className="flex justify-between text-sm">

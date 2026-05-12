@@ -56,17 +56,15 @@ class CircuitBreaker:
         self.state = "CLOSED"
 
 def with_retry(max_retries: int = 3, backoff: float = 2.0):
-    """Decorator for synchronous retry with exponential backoff."""
+    """Decorator for asynchronous retry with exponential backoff."""
     def decorator(func: Callable):
         @wraps(func)
-        def wrapper(*args, **kwargs):
+        async def wrapper(*args, **kwargs):
             last_err = None
             for attempt in range(1, max_retries + 1):
                 try:
-                    result = func(*args, **kwargs)
+                    result = await func(*args, **kwargs)
                     if isinstance(result, dict) and "error" in result:
-                        # Business error, maybe don't retry? 
-                        # For now, let's assume if it's in a dict, it's a handled error.
                         return result
                     return result
                 except Exception as e:
@@ -74,18 +72,20 @@ def with_retry(max_retries: int = 3, backoff: float = 2.0):
                     if attempt < max_retries:
                         sleep_time = backoff ** attempt
                         logger.warning(f"Retry {attempt}/{max_retries} for {func.__name__} after {sleep_time}s: {e}")
-                        time.sleep(sleep_time)
+                        await asyncio.sleep(sleep_time)
             raise last_err
         return wrapper
     return decorator
 
 def with_timeout(seconds: int = 10):
-    """Decorator for hard timeout on synchronous calls (via thread)."""
-    # Note: Implementing true sync timeout in Python is tricky without signals/threads.
-    # For now, this is a placeholder or uses simple timing.
+    """Decorator for hard timeout on asynchronous calls."""
     def decorator(func: Callable):
         @wraps(func)
-        def wrapper(*args, **kwargs):
-            return func(*args, **kwargs) # Placeholder
+        async def wrapper(*args, **kwargs):
+            try:
+                return await asyncio.wait_for(func(*args, **kwargs), timeout=seconds)
+            except asyncio.TimeoutError:
+                logger.error(f"Timeout of {seconds}s reached for {func.__name__}")
+                return {"error": f"Request timed out after {seconds}s."}
         return wrapper
     return decorator
