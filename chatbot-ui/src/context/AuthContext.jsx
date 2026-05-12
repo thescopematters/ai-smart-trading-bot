@@ -44,10 +44,12 @@ export const AuthProvider = ({ children }) => {
     };
 
     const logout = () => {
+    localStorage.removeItem('crypto_token');
+    localStorage.removeItem('crypto_user');
+    setTimeout(() => {
         setToken(null);
         setUser(null);
-        localStorage.removeItem('crypto_token');
-        localStorage.removeItem('crypto_user');
+    }, 0);
     };
 
     return (

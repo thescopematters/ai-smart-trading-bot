@@ -12,7 +12,7 @@ const ICONS = {
 };
 
 const BG = {
-  success: 'bg-primary-purple',
+  success: 'bg-green-600',
   error: 'bg-red-600',
   warning: 'bg-yellow-500',
   info: 'bg-indigo-600',

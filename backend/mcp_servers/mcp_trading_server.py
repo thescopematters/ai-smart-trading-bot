@@ -2,11 +2,12 @@ from fastmcp import FastMCP
 import os
 import sys
 import logging
-from sqlalchemy.orm import Session
 
 # Ensure parent directory is in path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+
+from sqlalchemy.orm import Session
 from database import SessionLocal, User
 from exchange_gateway.exchange_router import get_exchange
 
