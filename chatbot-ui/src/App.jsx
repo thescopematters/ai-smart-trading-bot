@@ -19,7 +19,7 @@ const Home = () => {
                         Your AI-powered crypto assistant. Get real-time prices, 
                         portfolio insights, and market analysis.
                     </p>
-                    <p className="text-indigo-500 text-xs sm:text-sm font-medium animate-pulse">
+                    <p className="text-[#072042] text-xs sm:text-sm font-medium animate-pulse">
                         💬 Click the chat bubble to get started →
                     </p>
                 </div>
