@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 # Ensure parent directory is in path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
 
 from sqlalchemy.orm import Session
 from database import SessionLocal, User
