@@ -451,8 +451,13 @@ async def prime_adk_session_from_db(session_id: str, user_id_ai: str):
     )
     
     # If session already has messages in RAM, don't re-prime (prevents duplicates)
-    if session and hasattr(session, 'history') and len(session.history) > 0:
-        return 
+    # if session and hasattr(session, 'history') and len(session.history) > 0:
+    #     return 
+    if session and (
+        (hasattr(session, 'history') and len(session.history) > 0) or
+        (hasattr(session, 'events') and len(session.events) > 0)
+    ):
+        return
     
     db = SessionLocal()
     try:
@@ -479,7 +484,11 @@ async def prime_adk_session_from_db(session_id: str, user_id_ai: str):
             )
             
         if session:
-            session.history = adk_messages
+            # session.history = adk_messages
+            if hasattr(session, 'history'):
+                session.history = adk_messages
+            elif hasattr(session, 'events'):
+                session.events = adk_messages
             logger.info(f"✅ Primed ADK session {session_id} with {len(adk_messages)} messages from DB")
     except Exception as e:
         logger.error(f"❌ Failed to prime session {session_id}: {e}")
@@ -730,7 +739,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
     db.close()
 
     existing_session = await session_service.get_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
-    history_found = (existing_session and hasattr(existing_session, 'history') and len(existing_session.history) > 0)
+    # history_found = (existing_session and hasattr(existing_session, 'history') and len(existing_session.history) > 0)
+
+    history_found = (
+        existing_session and (
+            (hasattr(existing_session, 'history') and len(existing_session.history) > 0) or
+            (hasattr(existing_session, 'events') and len(existing_session.events) > 0)
+        )
+    )
 
     if history_found:
         interaction_started = True
@@ -738,7 +754,12 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
         
         # Look for the last bot message to provide context for potential follow-up resume
         last_bot_msg = ""
-        for m in reversed(existing_session.history):
+        session_history = (
+            existing_session.history if hasattr(existing_session, 'history') 
+            else existing_session.events if hasattr(existing_session, 'events') 
+            else []
+        )
+        for m in reversed(session_history):
             if m.role == "model":
                 for p in m.parts:
                     if hasattr(p, 'text') and p.text:
