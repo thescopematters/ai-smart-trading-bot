@@ -87,25 +87,37 @@ def sync_rag_documents(db: Session):
 load_dotenv()
 
 # Add FFmpeg to PATH (required for webm -> wav conversion)
-ffmpeg_path = os.getenv("FFMPEG_BIN_PATH")
-
-# Only add to PATH if the environment variable exists and the path is valid
-if ffmpeg_path and os.path.exists(ffmpeg_path):
-    os.environ["PATH"] += os.pathsep + ffmpeg_path
+# ffmpeg_path = r"C:\Users\rites\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-8.0.1-full_build\bin"
+# if os.path.exists(ffmpeg_path):
+#     os.environ["PATH"] += os.pathsep + ffmpeg_path
 
 # --- Whisper.cpp Configuration ---
-# Portability: Use environment variables or relative paths
-base_dir = os.path.dirname(__file__)
-DEFAULT_WHISPER_DIR = os.path.join(base_dir, "whisper-cli", "whisper-cublas-12.4.0-bin-x64", "Release")
+# WHISPER_DIR = os.path.join(os.path.dirname(__file__), "whisper-cli", "whisper-cublas-12.4.0-bin-x64", "Release")
+# WHISPER_EXE = os.path.join(WHISPER_DIR, "whisper-cli.exe")
+# WHISPER_MODEL = os.path.join(WHISPER_DIR, "ggml-base.en.bin")
 
-WHISPER_DIR = os.getenv("WHISPER_DIR", DEFAULT_WHISPER_DIR)
-WHISPER_EXE = os.getenv("WHISPER_EXE_PATH", os.path.join(WHISPER_DIR, "whisper-cli.exe"))
-WHISPER_MODEL = os.getenv("WHISPER_MODEL_PATH", os.path.join(WHISPER_DIR, "ggml-base.en.bin"))
+FFMPEG_BIN = os.getenv("FFMPEG_BIN_PATH", "ffmpeg")  # relies on PATH, works everywhere
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+WHISPER_EXE = os.getenv(
+    "WHISPER_EXE_PATH",
+    os.path.join(BASE_DIR, "whisper.cpp", "build", "bin", "whisper-cli")
+)
+WHISPER_MODEL = os.getenv(
+    "WHISPER_MODEL_PATH",
+    os.path.join(BASE_DIR, "whisper.cpp", "models", "ggml-base.en.bin")
+)
+
+WHISPER_DIR = os.path.dirname(WHISPER_EXE)
+
+logger.info(f"Whisper EXE: {WHISPER_EXE}")
+logger.info(f"Whisper Model: {WHISPER_MODEL}")
 
 if os.path.exists(WHISPER_EXE):
-    logger.info(f"whisper-cli executable found: {WHISPER_EXE}")
+    logger.info(f"whisper-cli found: {WHISPER_EXE}")
 else:
-    logger.warning(f"whisper-cli NOT found at: {WHISPER_EXE}. Voice transcription will fail.")
+    logger.warning(f"whisper-cli NOT found at: {WHISPER_EXE}")
 
 app = FastAPI(title="CryptoAI Backend")
 
@@ -293,7 +305,9 @@ async def transcribe_with_whisper(webm_bytes: bytes) -> str:
 
         # 2. Convert webm → 16kHz mono WAV using ffmpeg (required by whisper.cpp)
         ffmpeg_cmd = [
-            "ffmpeg", "-y",
+            # "ffmpeg",
+            FFMPEG_BIN, 
+            "-y",
             "-i", temp_webm,
             "-ar", "16000",    # 16kHz sample rate
             "-ac", "1",        # Mono channel
