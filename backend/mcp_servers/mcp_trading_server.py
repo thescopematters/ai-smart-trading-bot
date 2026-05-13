@@ -28,6 +28,7 @@ def get_balance(user_id: str) -> dict:
             exchange = get_exchange(db, user)
             # We use a dummy quote to get the wallet info
             quote = exchange.get_quote("BTC", 0, "BUY")
+            logger.info(f"Quote result: {quote}")
             balance = quote.get("wallet", {}).get("current_balance", 0.0)
             
             return {
@@ -36,7 +37,8 @@ def get_balance(user_id: str) -> dict:
                 "message": f"Your current paper trading balance is **${balance:,.2f} USD**."
             }
     except Exception as e:
-        logger.error(f"Error in get_balance: {e}")
+        # logger.error(f"Error in get_balance: {e}")
+        logger.error(f"Error in get_balance: {e}", exc_info=True)
         return {"error": str(e)}
 
 @mcp.tool()
