@@ -1,0 +1,127 @@
+version: "3.9"
+
+services:
+
+  # ─────────────────────────────────────────
+  # 1. MySQL Database
+  # ─────────────────────────────────────────
+  mysql:
+    image: mysql:8.0
+    container_name: crypto_mysql
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - crypto_network
+
+  # ─────────────────────────────────────────
+  # 2. AI Backend (FastAPI + Python)
+  # ─────────────────────────────────────────
+  ai-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: crypto_ai_backend
+    restart: always
+    env_file:
+      - ./backend/.env
+    environment:
+      DATABASE_URL: mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}
+    ports:
+      - "8000:8000"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    volumes:
+      - ai_backend_data:/app/data
+      - chroma_data:/app/chroma_db
+    networks:
+      - crypto_network
+
+  # ─────────────────────────────────────────
+  # 3. Cryptox Exchange Backend (NestJS)
+  # ─────────────────────────────────────────
+  exchange-backend:
+    build:
+      context: ./cryptox/backend
+      dockerfile: Dockerfile
+    container_name: crypto_exchange_backend
+    restart: always
+    env_file:
+      - ./cryptox/backend/.env
+    ports:
+      - "3001:3001"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    networks:
+      - crypto_network
+
+  # ─────────────────────────────────────────
+  # 4. Chatbot UI (React/Vite)
+  # ─────────────────────────────────────────
+  chatbot-ui:
+    build:
+      context: ./chatbot-ui
+      dockerfile: Dockerfile
+    container_name: crypto_chatbot_ui
+    restart: always
+    ports:
+      - "3000:80"
+    depends_on:
+      - ai-backend
+    networks:
+      - crypto_network
+
+  # ─────────────────────────────────────────
+  # 5. Admin UI (React/Vite)
+  # ─────────────────────────────────────────
+  admin-ui:
+    build:
+      context: ./admin-ui
+      dockerfile: Dockerfile
+    container_name: crypto_admin_ui
+    restart: always
+    ports:
+      - "3002:80"
+    depends_on:
+      - ai-backend
+    networks:
+      - crypto_network
+
+  # ─────────────────────────────────────────
+  # 6. Cryptox Exchange Frontend (React/Vite)
+  # ─────────────────────────────────────────
+  exchange-frontend:
+    build:
+      context: ./cryptox/frontend
+      dockerfile: Dockerfile
+    container_name: crypto_exchange_frontend
+    restart: always
+    ports:
+      - "3003:80"
+    depends_on:
+      - exchange-backend
+    networks:
+      - crypto_network
+
+volumes:
+  mysql_data:
+  ai_backend_data:
+  chroma_data:
+
+networks:
+  crypto_network:
+    driver: bridge
