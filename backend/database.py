@@ -1,13 +1,16 @@
 import os
 import uuid
 import enum
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from sqlalchemy import (
     create_engine, Column, String, Integer, DateTime, ForeignKey, 
     Boolean, Text, JSON, func, Numeric, Enum, UniqueConstraint, Index
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
-from dotenv import load_dotenv
 
 # DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://admin:password@127.0.0.1:3306/clear_termite_db")
 DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("MYSQL_URL", "mysql+pymysql://root:root@127.0.0.1:3307/crypto_db")
