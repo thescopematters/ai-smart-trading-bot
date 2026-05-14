@@ -119,7 +119,7 @@ const MessageRow = memo(({ msg }) => (
       {msg.timestamp && msg.id !== "greeting" && (
         <span
           className={clsx(
-            "text-[12px] text-black font-semibold mt-1 px-1",
+            "text-[10px] text-slate-800 font-semibold mt-1 px-1",
             msg.isUser ? "text-right" : "text-left",
           )}
         >

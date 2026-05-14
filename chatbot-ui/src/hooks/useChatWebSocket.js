@@ -191,19 +191,31 @@ export const useChatWebSocket = (url, sessionId, userPrefix = 'guest', isActive 
         };
     }, [url, sessionId, userPrefix, isGuest, isActive]);
 
-    // Notify server of active state
+    // Heartbeat to keep connection alive and sync visibility
+    useEffect(() => {
+        if (!isConnected || !socketRef.current) return;
+
+        const heartbeatInterval = setInterval(() => {
+            if (socketRef.current?.readyState === WebSocket.OPEN) {
+                socketRef.current.send(JSON.stringify({ 
+                    type: "heartbeat", 
+                    background: document.hidden 
+                }));
+            }
+        }, 30000); // 30 seconds
+
+        return () => clearInterval(heartbeatInterval);
+    }, [isConnected, isActive]);
+
+    // Also notify on visibility/active state change
     useEffect(() => {
         if (socketRef.current?.readyState === WebSocket.OPEN) {
             socketRef.current.send(JSON.stringify({ 
-                type: 'visibility', 
-                is_active: isActive && !document.hidden 
+                type: "heartbeat", 
+                background: document.hidden 
             }));
         }
-        // If the user navigates away from the chat (e.g. to history), 
-        // we should clear local processing states to avoid UI glitches on return.
-        if (!isActive) {
-            setIsTyping(false);
-        }
+        if (!isActive) setIsTyping(false);
     }, [isActive, isConnected]);
 
     // Connect (with a small debounce to handle React Strict Mode double-mount)

@@ -91,11 +91,19 @@ load_dotenv()
 # Add FFmpeg to PATH (required for webm -> wav conversion)
 # Portability: Check env for custom path, otherwise try your local default
 ffmpeg_path = os.getenv("FFMPEG_BIN_PATH")
-FFMPEG_BIN = os.getenv("FFMPEG_BIN_PATH", "ffmpeg") # fallback to just 'ffmpeg' if in system path
 
-# Only add to PATH if the environment variable exists and the path is valid
 if ffmpeg_path and os.path.exists(ffmpeg_path):
-    os.environ["PATH"] += os.pathsep + ffmpeg_path
+    if os.path.isdir(ffmpeg_path):
+        # If it's a directory, add to PATH and look for ffmpeg.exe inside
+        os.environ["PATH"] += os.pathsep + ffmpeg_path
+        FFMPEG_BIN = os.path.join(ffmpeg_path, "ffmpeg.exe")
+        if not os.path.exists(FFMPEG_BIN):
+             FFMPEG_BIN = "ffmpeg" # Fallback to path lookup
+    else:
+        # If it's a direct path to the exe
+        FFMPEG_BIN = ffmpeg_path
+else:
+    FFMPEG_BIN = "ffmpeg" # relies on system PATH
 
 # --- Whisper.cpp Configuration ---
 # Portability: Use environment variables or relative paths
@@ -270,7 +278,7 @@ def list_sessions(current_user: User = Depends(get_current_user), db: Session = 
         "last_message_at": s.last_message_at.replace(tzinfo=timezone.utc).timestamp() * 1000 if s.last_message_at else 0,
         "is_ended": (
             s.last_message_at is not None and 
-            (now - s.last_message_at.replace(tzinfo=timezone.utc)).total_seconds() >= 300
+            (now - s.last_message_at.replace(tzinfo=timezone.utc)).total_seconds() >= 600
         )
     } for s in sessions]
 
@@ -687,7 +695,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
                 await asyncio.sleep(10)
                 if session_ended: return
                 elapsed = time.time() - last_activity_time
-                if elapsed >= 300:  # 5 minutes
+                if elapsed >= 600:  # 10 minutes
                     logger.info(f"Hard timeout reached for {client_id} ({elapsed:.0f}s idle)")
                     session_ended = True
                     try:
@@ -736,7 +744,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
     # --- Check for 5-minute Timeout (Persistent) ---
     if session_obj and session_obj.last_message_at:
         elapsed = (datetime.now(timezone.utc) - session_obj.last_message_at.replace(tzinfo=timezone.utc)).total_seconds()
-        if elapsed >= 300:
+        if elapsed >= 600:
             logger.info(f"Session {client_id} resumed but is already timed out ({elapsed:.0f}s). Locking.")
             session_ended = True
             await websocket.send_json({"type": "session.end"})
@@ -815,8 +823,18 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
         while True:
             message = await websocket.receive()
 
-            # Update activity timestamp on any message
-            last_activity_time = time.time()
+            if "text" in message:
+                data = json.loads(message["text"])
+                msg_type = data.get("type")
+                
+                # Reset inactivity timer for any REAL interaction, but ignore automated heartbeats
+                if msg_type != "heartbeat":
+                    last_activity_time = time.time()
+                
+                if msg_type == "user_typing":
+                    last_typing_time = time.time()
+                    # Skip further processing for typing indicator
+                    continue
 
             if "bytes" in message and message["bytes"]:
                 cancel_followup()

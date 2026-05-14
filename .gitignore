@@ -5,22 +5,26 @@ __pycache__/
 venv/
 venv*/
 .venv/
-.env
+.env*
+.flaskenv
 
 # Node
 node_modules/
 dist/
+build/
 .DS_Store
+.env.local
+.env.*.local
 
 # IDE
 .idea/
 .vscode/
+*.swp
+*.swo
 
-# ADK
+# ADK & Project Data
 .adk/
 crypto_data/
-
-# Vector Databases and Models
 chroma_db/
 *.parquet
 *.sqlite3
@@ -30,8 +34,12 @@ data/*.pkl
 backend/data/
 vector_store.pkl
 
-# Binaries and Logs
+# Whisper & Binaries
 backend/whisper-cli/
-*.log
+whisper.cpp/
+temp_audio.*
+*.bin
+*.pkl
 *.exe
 *.dll
+*.log

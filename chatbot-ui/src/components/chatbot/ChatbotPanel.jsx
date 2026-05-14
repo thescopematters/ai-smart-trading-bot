@@ -285,12 +285,16 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
             parseInt(
               localStorage.getItem(`crypto_viewed_${userPrefix}_${s.id}`),
             ) || 0;
+          const timeSinceLastMsg = Date.now() - (s.last_message_at || 0);
+          const isTimedOut = timeSinceLastMsg >= 600000; // 10 minutes
+
           // It is unread if the server's last message time is strictly newer than our last viewed time
           // OR if the websocket explicitly flagged it as unread.
           const isUnread =
-            s.last_message_at > viewedAt ||
-            localStorage.getItem(`crypto_unread_${userPrefix}_${s.id}`) ===
-              "true";
+            !isTimedOut && (
+              s.last_message_at > viewedAt ||
+              localStorage.getItem(`crypto_unread_${userPrefix}_${s.id}`) === "true"
+            );
 
           return {
             id: s.id,
@@ -298,7 +302,7 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
             time: getRelativeTime(s.last_message_at),
             timestampRaw: s.last_message_at,
             isUnread: isUnread,
-            isEnded: s.is_ended === true,
+            isEnded: s.is_ended === true || isTimedOut,
           };
         }),
       );
@@ -483,7 +487,7 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
                           </h3>
                           <div className="flex items-center gap-2">
                             <span
-                              className={`text-[12px] ${session.isUnread ? "font-semibold text-black" : "font-medium text-slate-700"}`}
+                              className={`text-[10px] ${session.isUnread ? "font-semibold text-black" : "font-medium text-slate-700"}`}
                             >
                               {session.time}
                             </span>
@@ -525,7 +529,13 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
                         <p
                           className={`text-sm truncate ${session.isUnread ? "text-slate-900 font-semibold" : "text-slate-600"}`}
                         >
-                          {session.preview || "No messages yet"}
+                          {session.isEnded ? (
+                            <span className="text-black-600/70 font-bold text-[10px] uppercase tracking-wider">
+                              Your chat has ended
+                            </span>
+                          ) : (
+                            session.preview || "No messages yet"
+                          )}
                         </p>
                       </div>
                     </div>
@@ -610,7 +620,7 @@ const ActiveChat = ({
           {isSessionEnd ? (
             <div className="p-3 text-center border-t border-slate-200 bg-white/80 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
               <p className="text-slate-500 text-sm font-medium leading-relaxed">
-                Session ended due to inactivity.
+                Your chat has ended.
                 <br />
                 <button
                   onClick={onNewChat}
