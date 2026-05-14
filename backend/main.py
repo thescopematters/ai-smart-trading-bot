@@ -608,17 +608,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
                     count = guest_nudge_count
 
                 # --- Dynamic Idle Check ---
-                # Only send if:
-                # 1. Chat is actively open (is_client_active)
-                # 2. User is not currently typing (last 10s)
-                # 3. User has been idle for at least 80s since last activity
+                # Only skip if the user is actively typing right now (last 10s)
+                # We no longer care if the tab is 'active' or 'hidden' - if they are idle, nudge them.
                 current_time = time.time()
-                is_idle = (current_time - last_activity_time) >= 80
+                is_idle = (current_time - last_activity_time) >= 90
                 is_typing_now = (current_time - last_typing_time) < 10
 
-                if not is_client_active or is_typing_now or not is_idle:
-                    logger.info(f"Nudge skipped for {client_id}: active={is_client_active}, typing={is_typing_now}, idle={is_idle}")
-                    # Re-queue the loop if we want to try again, but let's just skip this slot
+                if is_typing_now or not is_idle:
+                    logger.info(f"Nudge postponed for {client_id}: typing={is_typing_now}, idle_timer_met={is_idle}")
                     continue
 
                 if count >= 2: 
@@ -816,19 +813,16 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
 
                 elif msg_type == "visibility" or msg_type == "activity":
                     # Activity heartbeat to prevent timeout
-                    cancel_followup()
-                    cancel_cold_start()
-                    interaction_started = True
-                    # If visibility message contains is_active=true, it counts as activity
-                    if msg_type == "visibility" and not data.get("is_active", False):
-                         # If they are NOT active, don't necessarily reset the clock as strongly
-                         # but for now, we follow the logic that ANY heartbeat keeps it alive
-                         pass
+                    # We do NOT cancel followups here, because these are background heartbeats.
+                    # Interaction only counts if the user actually types or speaks.
+                    if msg_type == "visibility":
+                         is_client_active = data.get("is_active", False)
                     continue
 
                 elif msg_type == "user_typing":
-                    cancel_followup()
-                    cancel_cold_start()
+                    # Update typing timestamp but DO NOT cancel the follow-up task.
+                    # The follow-up loop will see this timestamp and wait.
+                    last_typing_time = time.time()
                     interaction_started = True
                     continue
 
