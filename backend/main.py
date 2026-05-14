@@ -599,7 +599,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
                         await session_service.create_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
                         session = await session_service.get_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
                     
-                    if session:
+                    if session and hasattr(session, 'history'):
                         session.history.append(types.Content(role="model", parts=[types.Part(text=msg)]))
                         logger.info(f"Synced cold start nudge to ADK session {client_id}")
 
@@ -676,7 +676,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
                     await session_service.create_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
                     session = await session_service.get_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
                 
-                if session:
+                if session and hasattr(session, 'history'):
                     session.history.append(types.Content(role="model", parts=[types.Part(text=msg)]))
                     logger.info(f"Synced follow-up nudge to ADK session {client_id}")
                     
