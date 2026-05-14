@@ -790,8 +790,13 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
             else []
         )
         for m in reversed(session_history):
-            if m.role == "model":
-                for p in m.parts:
+            # ADK Event object uses 'author' not 'role'
+            m_role = getattr(m, 'role', None) or getattr(m, 'author', None)
+            if m_role == "model":
+                parts = getattr(m, 'parts', [])
+                if not parts and hasattr(m, 'content'):
+                    parts = getattr(m.content, 'parts', [])
+                for p in parts:
                     if hasattr(p, 'text') and p.text:
                         last_bot_msg = p.text
                         break
