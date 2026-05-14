@@ -42,3 +42,24 @@
   }
 }@keyframes soundwave { 0%, 100% { transform: scaleY(0.3); } 50% { transform: scaleY(1); } }
 .animate-soundwave { animation-name: soundwave; animation-iteration-count: infinite; animation-timing-function: ease-in-out; }
+
+
+textarea::-webkit-scrollbar {
+    width: 3px;
+}
+textarea::-webkit-scrollbar-thumb {
+    background: #aaa9ad;
+    border-radius: 999px;
+}
+textarea::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.wavebar {
+  transform-origin: center;
+}
+
+@keyframes wavebar {
+  from { transform: scaleY(0.3); }
+  to   { transform: scaleY(1); }
+}

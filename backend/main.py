@@ -91,6 +91,7 @@ load_dotenv()
 # Add FFmpeg to PATH (required for webm -> wav conversion)
 # Portability: Check env for custom path, otherwise try your local default
 ffmpeg_path = os.getenv("FFMPEG_BIN_PATH")
+FFMPEG_BIN = os.getenv("FFMPEG_BIN_PATH", "ffmpeg") # fallback to just 'ffmpeg' if in system path
 
 # Only add to PATH if the environment variable exists and the path is valid
 if ffmpeg_path and os.path.exists(ffmpeg_path):
@@ -98,24 +99,32 @@ if ffmpeg_path and os.path.exists(ffmpeg_path):
 
 # --- Whisper.cpp Configuration ---
 # Portability: Use environment variables or relative paths
-base_dir = os.path.dirname(__file__)
-DEFAULT_WHISPER_DIR = os.path.join(base_dir, "whisper-cli", "whisper-cublas-12.4.0-bin-x64", "Release")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-WHISPER_DIR = os.getenv("WHISPER_DIR", DEFAULT_WHISPER_DIR)
-WHISPER_EXE = os.getenv("WHISPER_EXE_PATH", os.path.join(WHISPER_DIR, "whisper-cli.exe"))
-WHISPER_MODEL = os.getenv("WHISPER_MODEL_PATH", os.path.join(WHISPER_DIR, "ggml-base.en.bin"))
+# Default structure from latest main
+DEFAULT_WHISPER_EXE = os.path.join(BASE_DIR, "whisper.cpp", "build", "bin", "whisper-cli")
+DEFAULT_WHISPER_MODEL = os.path.join(BASE_DIR, "whisper.cpp", "models", "ggml-base.en.bin")
+
+# Use ENV if available, otherwise use defaults
+WHISPER_EXE = os.getenv("WHISPER_EXE_PATH", DEFAULT_WHISPER_EXE)
+WHISPER_MODEL = os.getenv("WHISPER_MODEL_PATH", DEFAULT_WHISPER_MODEL)
+WHISPER_DIR = os.path.dirname(WHISPER_EXE)
+
+logger.info(f"Whisper EXE: {WHISPER_EXE}")
+logger.info(f"Whisper Model: {WHISPER_MODEL}")
 
 if os.path.exists(WHISPER_EXE):
     logger.info(f"whisper-cli executable found: {WHISPER_EXE}")
 else:
-    logger.warning(f"whisper-cli NOT found at: {WHISPER_EXE}. Voice transcription will fail.")
+    logger.warning(f"whisper-cli NOT found at: {WHISPER_EXE}. Voice transcription may fail if not configured in .env")
 
 app = FastAPI(title="CryptoAI Backend")
 
 # Enable CORS for frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "*"],
+    allow_origins=["http://localhost:3000", "https://ai-smart-trading-bot-j6ry.vercel.app",
+    "https://ai-smart-trading-bot.vercel.app", "*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -303,7 +312,9 @@ async def transcribe_with_whisper(webm_bytes: bytes) -> str:
 
         # 2. Convert webm → 16kHz mono WAV using ffmpeg (required by whisper.cpp)
         ffmpeg_cmd = [
-            "ffmpeg", "-y",
+            # "ffmpeg",
+            FFMPEG_BIN, 
+            "-y",
             "-i", temp_webm,
             "-ar", "16000",    # 16kHz sample rate
             "-ac", "1",        # Mono channel
@@ -447,8 +458,13 @@ async def prime_adk_session_from_db(session_id: str, user_id_ai: str):
     )
     
     # If session already has messages in RAM, don't re-prime (prevents duplicates)
-    if session and hasattr(session, 'history') and len(session.history) > 0:
-        return 
+    # if session and hasattr(session, 'history') and len(session.history) > 0:
+    #     return 
+    if session and (
+        (hasattr(session, 'history') and len(session.history) > 0) or
+        (hasattr(session, 'events') and len(session.events) > 0)
+    ):
+        return
     
     db = SessionLocal()
     try:
@@ -475,7 +491,11 @@ async def prime_adk_session_from_db(session_id: str, user_id_ai: str):
             )
             
         if session:
-            session.history = adk_messages
+            # session.history = adk_messages
+            if hasattr(session, 'history'):
+                session.history = adk_messages
+            elif hasattr(session, 'events'):
+                session.events = adk_messages
             logger.info(f"✅ Primed ADK session {session_id} with {len(adk_messages)} messages from DB")
     except Exception as e:
         logger.error(f"❌ Failed to prime session {session_id}: {e}")
@@ -576,7 +596,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
                         await session_service.create_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
                         session = await session_service.get_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
                     
-                    if session:
+                    if session and hasattr(session, 'history'):
                         session.history.append(types.Content(role="model", parts=[types.Part(text=msg)]))
                         logger.info(f"Synced cold start nudge to ADK session {client_id}")
 
@@ -650,7 +670,7 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
                     await session_service.create_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
                     session = await session_service.get_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
                 
-                if session:
+                if session and hasattr(session, 'history'):
                     session.history.append(types.Content(role="model", parts=[types.Part(text=msg)]))
                     logger.info(f"Synced follow-up nudge to ADK session {client_id}")
                     
@@ -743,7 +763,14 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
     db.close()
 
     existing_session = await session_service.get_session(app_name="CryptoBackend", user_id=user_id_for_ai, session_id=client_id)
-    history_found = (existing_session and hasattr(existing_session, 'history') and len(existing_session.history) > 0)
+    # history_found = (existing_session and hasattr(existing_session, 'history') and len(existing_session.history) > 0)
+
+    history_found = (
+        existing_session and (
+            (hasattr(existing_session, 'history') and len(existing_session.history) > 0) or
+            (hasattr(existing_session, 'events') and len(existing_session.events) > 0)
+        )
+    )
 
     if history_found:
         interaction_started = True
@@ -751,9 +778,19 @@ async def websocket_endpoint(websocket: WebSocket, client_id: str, token: Option
         
         # Look for the last bot message to provide context for potential follow-up resume
         last_bot_msg = ""
-        for m in reversed(existing_session.history):
-            if m.role == "model":
-                for p in m.parts:
+        session_history = (
+            existing_session.history if hasattr(existing_session, 'history') 
+            else existing_session.events if hasattr(existing_session, 'events') 
+            else []
+        )
+        for m in reversed(session_history):
+            # ADK Event object uses 'author' not 'role'
+            m_role = getattr(m, 'role', None) or getattr(m, 'author', None)
+            if m_role == "model":
+                parts = getattr(m, 'parts', [])
+                if not parts and hasattr(m, 'content'):
+                    parts = getattr(m.content, 'parts', [])
+                for p in parts:
                     if hasattr(p, 'text') and p.text:
                         last_bot_msg = p.text
                         break

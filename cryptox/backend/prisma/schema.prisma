@@ -1,0 +1,130 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────
+// TABLE 1: Users
+// Stores login info for each user
+// ─────────────────────────────────────────
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  username  String   @unique
+  password  String
+  createdAt DateTime @default(now())
+
+  // Relations
+  balances  Balance[]
+  orders    Order[]
+  buyTrades  Trade[] @relation("BuyerTrades")
+  sellTrades Trade[] @relation("SellerTrades")
+}
+
+// ─────────────────────────────────────────
+// TABLE 2: Balances
+// Each user has one row per currency
+// e.g. user has 1 BTC row + 1 USDT row
+// ─────────────────────────────────────────
+model Balance {
+  id        String   @id @default(uuid())
+  userId    String
+  currency  String   // 'BTC', 'ETH', 'USDT'
+  available Decimal  @default(0) // free to use
+  locked    Decimal  @default(0) // held in open orders
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([userId, currency]) // one row per user per currency
+}
+
+// ─────────────────────────────────────────
+// TABLE 3: Trading Pairs
+// e.g. BTC/USDT, ETH/USDT
+// ─────────────────────────────────────────
+model TradingPair {
+  id             String  @id @default(uuid())
+  symbol         String  @unique // 'BTC/USDT'
+  baseCurrency   String  // 'BTC'  → what you're buying
+  quoteCurrency  String  // 'USDT' → what you pay with
+  minOrderSize   Decimal @default(0.0001)
+  isActive       Boolean @default(true)
+
+  // Relations
+  orders Order[]
+  trades Trade[]
+}
+
+// ─────────────────────────────────────────
+// TABLE 4: Orders
+// Every buy/sell order placed by a user
+// ─────────────────────────────────────────
+model Order {
+  id          String      @id @default(uuid())
+  userId      String
+  pairId      String
+  side        OrderSide   // 'buy' or 'sell'
+  type        OrderType   // 'limit' or 'market'
+  price       Decimal?    // null for market orders
+  quantity    Decimal     // total amount to buy/sell
+  filledQty   Decimal     @default(0) // how much matched so far
+  status      OrderStatus @default(OPEN)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relations
+  user        User        @relation(fields: [userId], references: [id])
+  pair        TradingPair @relation(fields: [pairId], references: [id])
+  buyTrades   Trade[]     @relation("BuyOrderTrades")
+  sellTrades  Trade[]     @relation("SellOrderTrades")
+}
+
+// ─────────────────────────────────────────
+// TABLE 5: Trades
+// Created when two orders match
+// This feeds the price chart
+// ─────────────────────────────────────────
+model Trade {
+  id          String      @id @default(uuid())
+  pairId      String
+  buyOrderId  String
+  sellOrderId String
+  buyerId     String
+  sellerId    String
+  price       Decimal     // actual execution price
+  quantity    Decimal     // how much was traded
+  createdAt   DateTime    @default(now())
+
+  // Relations
+  pair        TradingPair @relation(fields: [pairId], references: [id])
+  buyOrder    Order       @relation("BuyOrderTrades", fields: [buyOrderId], references: [id])
+  sellOrder   Order       @relation("SellOrderTrades", fields: [sellOrderId], references: [id])
+  buyer       User        @relation("BuyerTrades", fields: [buyerId], references: [id])
+  seller      User        @relation("SellerTrades", fields: [sellerId], references: [id])
+}
+
+// ─────────────────────────────────────────
+// ENUMS (fixed value options)
+// ─────────────────────────────────────────
+enum OrderSide {
+  BUY
+  SELL
+}
+
+enum OrderType {
+  LIMIT
+  MARKET
+}
+
+enum OrderStatus {
+  OPEN
+  PARTIAL
+  FILLED
+  CANCELLED
+}

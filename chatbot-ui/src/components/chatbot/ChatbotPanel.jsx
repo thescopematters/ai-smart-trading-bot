@@ -17,10 +17,11 @@ import {
   Minimize2,
   Maximize2,
 } from "lucide-react";
-import cryptobotAvatar from "../../assets/cryptobot_avatar_cute.png";
+import cryptobotAvatar from "../../assets/cryptobot_avatar_cute_1.png";
 import { useToast } from "../../context/ToastContext";
 import ConfirmModal from "../../ui/ConfirmModal";
-import { api } from '../../services/api';
+import { api } from "../../services/api";
+import { useLoader } from "../../context/LoaderContext";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -54,7 +55,10 @@ const newSessionId = () =>
 const HistorySkeleton = () => (
   <div className="flex flex-col gap-3 p-4">
     {[1, 2, 3, 4, 5].map((i) => (
-      <div key={i} className="flex items-center gap-4 p-4 bg-white/60 border border-white/40 rounded-2xl animate-pulse">
+      <div
+        key={i}
+        className="flex items-center gap-4 p-4 bg-white/60 border border-white/40 rounded-2xl animate-pulse"
+      >
         <div className="w-12 h-12 rounded-full bg-slate-100 shadow-inner" />
         <div className="flex-1 space-y-2">
           <div className="h-4 bg-indigo-500/10 rounded w-1/3" />
@@ -72,22 +76,23 @@ const ChatSkeleton = () => (
       <div className="h-20 bg-white rounded-2xl rounded-bl-none w-3/4 shadow-sm border border-slate-100" />
     </div>
     <div className="flex justify-end gap-3">
-      <div className="h-12 bg-violet-600/10 rounded-2xl rounded-br-none w-2/3 shadow-sm border border-violet-100/50" />
+      <div className="h-12 bg-[#072042]/10 rounded-2xl rounded-br-none w-2/3 shadow-sm border border-[#072042]/10" />
     </div>
     <div className="flex justify-start gap-3">
       <div className="w-8 h-8 rounded-full bg-slate-100 shrink-0" />
       <div className="h-24 bg-white rounded-2xl rounded-bl-none w-4/5 shadow-sm border border-slate-100" />
     </div>
     <div className="flex justify-end gap-3">
-      <div className="h-16 bg-violet-600/10 rounded-2xl rounded-br-none w-1/2 shadow-sm border border-violet-100/50" />
+      <div className="h-16 bg-[#072042]/10 rounded-2xl rounded-br-none w-1/2 shadow-sm border border-[#072042]/10" />
     </div>
   </div>
 );
 
 // ─── Main Component ──────────────────────────────────────────────────────────
 
-const ChatbotPanel = ({ onMaximize, isMaximized }) => {
+const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
   const toast = useToast();
+  const { setIsLoading } = useLoader();
   const [confirmModal, setConfirmModal] = useState({
     open: false,
     sessionId: null,
@@ -199,12 +204,15 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
   }, [activeSessionId, isGuest, userPrefix]);
 
   // ── WebSocket ───────────────────────────────────────────────────────────
-  const wsUrl = import.meta.env.VITE_WS_URL || "ws://localhost:8000/ws/chat";
+  const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:8000";
+  const WS_BASE = API_BASE.replace(/^http/, "ws");
+  const wsUrl = `${WS_BASE}/ws/chat`;
+
   const chatControls = useChatWebSocket(
     `${wsUrl}?token=${token || ""}`,
     activeSessionId,
     userPrefix,
-    !showHistory, // isActive: suppress notifications when looking at chat
+    !showHistory,
   );
   const { messages, reportActivity } = chatControls;
 
@@ -235,7 +243,7 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
   // ── Default questions ───────────────────────────────────────────────────
   const fetchDefaultQuestions = useCallback(async () => {
     try {
-      const res = await api.get('/api/questions');
+      const res = await api.get("/api/questions");
       if (res.ok) {
         const data = await res.json();
         setDefaultQuestions(data);
@@ -268,7 +276,7 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
 
     setLoadingSessions(true);
     try {
-      const res = await api.get('/api/sessions', token);
+      const res = await api.get("/api/sessions", token);
       if (!res.ok) return;
       const data = await res.json();
       setSessions(
@@ -282,7 +290,7 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
           const isUnread =
             s.last_message_at > viewedAt ||
             localStorage.getItem(`crypto_unread_${userPrefix}_${s.id}`) ===
-            "true";
+              "true";
 
           return {
             id: s.id,
@@ -310,6 +318,7 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
   const confirmDelete = async () => {
     const sessionId = confirmModal.sessionId;
     setConfirmModal({ open: false, sessionId: null });
+    setIsLoading(true);
     try {
       const res = await api.delete(`/api/sessions/${sessionId}`, token);
       if (res.ok) {
@@ -324,6 +333,8 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
       }
     } catch {
       toast({ type: "error", message: "Something went wrong." });
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -395,14 +406,17 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
           /* ── HISTORY LIST VIEW ── */
           <div className="flex flex-col w-full h-full bg-slate-50/40 backdrop-blur-md">
             {/* History List View header - find this section and update */}
-            <div className="flex items-center justify-between p-6 border-b border-indigo-50 bg-white/40">
-              <h2 className="text-xl font-bold text-slate-800 tracking-wide">
-                Your Chats
-              </h2>
+            <div className="flex items-center justify-between p-4 sm:p-4 border-b border-slate-700 bg-[#072042]">
+              <div className="flex flex-col">
+                <h2 className="text-xl font-bold text-white tracking-wide">
+                  Chats
+                </h2>
+                <p className="text-xs text-white/70">Recent chat history</p>
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={startNewChat}
-                  className="p-3 bg-slate-900 text-white rounded-xl hover:bg-black hover:shadow-lg hover:-translate-y-0.5 transition-all flex items-center justify-center shadow-md active:scale-95"
+                  className="p-2 rounded-full hover:bg-white/10 transition text-white flex items-center justify-center"
                   title="New Chat"
                 >
                   <MessagesSquare className="w-5 h-5" />
@@ -412,7 +426,7 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
                 {onMaximize && (
                   <button
                     onClick={onMaximize}
-                    className="p-3.5 rounded-xl bg-slate-900 text-white hover:bg-black flex items-center justify-center transition-all"
+                    className="p-2 rounded-full hover:bg-white/10 transition text-white flex items-center justify-center"
                     title={isMaximized ? "Minimize" : "Maximize"}
                   >
                     {isMaximized ? (
@@ -446,7 +460,7 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
                     <div
                       key={session.id}
                       onClick={() => handleSelectSession(session.id)}
-                      className={`group flex items-center gap-4 p-4 cursor-pointer bg-white/60 hover:bg-white border border-white/40 rounded-2xl shadow-sm hover:shadow-md transition-all relative ${session.isUnread ? "ring-1 ring-indigo-500/20 bg-indigo-50/5" : ""}`}
+                      className={`group flex items-center gap-3 sm:gap-4 p-3 sm:p-4 cursor-pointer bg-white/60 hover:bg-white border border-white/40 rounded-2xl shadow-sm hover:shadow-md transition-all relative ${session.isUnread ? "ring-1 ring-[#072042]/20 bg-[#072042]/5" : ""}`}
                     >
                       <div className="relative shrink-0">
                         <div className="w-12 h-12 rounded-full overflow-hidden shadow-inner bg-white border border-slate-100">
@@ -457,19 +471,19 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
                           />
                         </div>
                         {session.isUnread && (
-                          <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-indigo-500 border-2 border-white rounded-full animate-pulse shadow-sm z-10" />
+                          <span className="absolute -top-0.5 -right-0.5 w-3.5 h-3.5 bg-[#072042] border-2 border-white rounded-full animate-pulse shadow-sm z-10" />
                         )}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex justify-between items-baseline mb-1">
                           <h3
-                            className={`font-bold ${session.isUnread ? "text-indigo-900" : "text-slate-800"}`}
+                            className={`font-bold ${session.isUnread ? "text-[#072042]" : "text-slate-800"}`}
                           >
                             CryptoBot
                           </h3>
                           <div className="flex items-center gap-2">
                             <span
-                              className={`text-[11px] ${session.isUnread ? "font-bold text-indigo-500" : "font-medium text-slate-400"}`}
+                              className={`text-[12px] ${session.isUnread ? "font-semibold text-black" : "font-medium text-slate-700"}`}
                             >
                               {session.time}
                             </span>
@@ -484,10 +498,11 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
                                         : session.id,
                                     );
                                   }}
-                                  className={`p-1 rounded-full transition-all ${menuOpenId === session.id
+                                  className={`p-1 rounded-full transition-all ${
+                                    menuOpenId === session.id
                                       ? "opacity-100 bg-slate-200 text-slate-600"
-                                      : "hover:bg-slate-200 text-slate-400 opacity-0 group-hover:opacity-100"
-                                    }`}
+                                      : "hover:bg-slate-200 text-slate-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                                  }`}
                                 >
                                   <MoreVertical size={14} />
                                 </button>
@@ -497,7 +512,7 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
                                       onClick={(e) =>
                                         handleDeleteSession(e, session.id)
                                       }
-                                      className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-indigo-600 flex items-center gap-2 transition-colors"
+                                      className="w-full text-left px-4 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 hover:text-[#072042] flex items-center gap-2 transition-colors"
                                     >
                                       <Trash2 size={12} /> Delete Session
                                     </button>
@@ -510,13 +525,7 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
                         <p
                           className={`text-sm truncate ${session.isUnread ? "text-slate-900 font-semibold" : "text-slate-600"}`}
                         >
-                          {session.isEnded ? (
-                            <span className="text-slate-900 font-semibold text-xs uppercase tracking-tight">
-                              Chat has ended
-                            </span>
-                          ) : (
-                            session.preview
-                          )}
+                          {session.preview || "No messages yet"}
                         </p>
                       </div>
                     </div>
@@ -533,6 +542,7 @@ const ChatbotPanel = ({ onMaximize, isMaximized }) => {
             onOpenHistory={() => setShowHistory(true)}
             showHistoryBtn={showHistoryBtn}
             onNewChat={startNewChat}
+            onClose={onClose}
             onMaximize={onMaximize}
             isMaximized={isMaximized}
           />
@@ -557,6 +567,7 @@ const ActiveChat = ({
   onOpenHistory,
   showHistoryBtn,
   onNewChat,
+  onClose,
   onMaximize,
   isMaximized,
 }) => {
@@ -575,7 +586,7 @@ const ActiveChat = ({
   return (
     <>
       <ChatHeader
-        onClose={() => { }}
+        onClose={onClose}
         status={
           !isConnected ? "Connecting..." : isTyping ? "Processing..." : "Online"
         }
@@ -586,19 +597,24 @@ const ActiveChat = ({
       />
 
       {!isConnected ? (
-        <ChatSkeleton />
+        <div className="flex-1 flex items-center justify-center bg-white">
+          <div className="flex flex-col items-center gap-3">
+            <div className="w-10 h-10 rounded-full border-4 border-[#072042]/20 border-t-[#072042] animate-spin" />
+            <p className="text-sm text-slate-400 font-medium">Connecting...</p>
+          </div>
+        </div>
       ) : (
         <div className="flex-1 flex flex-col overflow-hidden">
           <ChatMessages messages={messages} isTyping={isTyping} />
 
           {isSessionEnd ? (
-            <div className="p-8 text-center border-t border-slate-100 bg-white/80 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="p-3 text-center border-t border-slate-200 bg-white/80 backdrop-blur-sm animate-in fade-in slide-in-from-bottom-4 duration-500">
               <p className="text-slate-500 text-sm font-medium leading-relaxed">
                 Session ended due to inactivity.
                 <br />
                 <button
                   onClick={onNewChat}
-                  className="text-violet-600 hover:text-violet-700 font-bold hover:underline transition-all mt-1"
+                  className="text-[#072042] hover:text-[#072042] font-bold hover:underline transition-all mt-1"
                 >
                   Click here
                 </button>
@@ -611,12 +627,12 @@ const ActiveChat = ({
           ) : (
             <>
               {messages.length <= 1 && defaultQuestions.length > 0 && (
-                <div className="px-4 pb-2 grid grid-cols-2 gap-2">
+                <div className="px-3 sm:px-4 pb-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {defaultQuestions.map((q, i) => (
                     <button
                       key={q.id || i}
                       onClick={() => sendMessage(q.text)}
-                      className="text-left text-xs bg-white hover:bg-white/80 border border-white/60 hover:border-violet-200 text-slate-600 hover:text-violet-600 p-4 rounded-xl transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5 animate-in fade-in zoom-in-95"
+                      className="text-left text-xs bg-white hover:bg-white/80 border border-white/60 hover:border-[#072042]/30 text-slate-600 hover:text-[#072042] p-4 rounded-xl transition-all duration-300 shadow-sm hover:shadow-md hover:-translate-y-0.5 animate-in fade-in zoom-in-95"
                       style={{ animationDelay: `${i * 100}ms` }}
                     >
                       {q.text}
