@@ -1165,30 +1165,68 @@ def get_session_messages(session_id: str, db: Session = Depends(get_db), current
 @app.post("/api/admin/documents")
 async def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db), current_admin: AdminUser = Depends(get_current_admin)):
     import shutil
-    import os
+    import boto3
+    
+    s3_bucket = os.getenv("S3_BUCKET_NAME")
+    s3_key = None
+    file_url = None
+    file_size = 0
     
     try:
-        os.makedirs("./data", exist_ok=True)
-        file_path = f"./data/{file.filename}"
+        # Read file content once
+        file_content = await file.read()
+        file_size = len(file_content)
         
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+        if s3_bucket:
+            # --- S3 Upload Path ---
+            s3 = boto3.client(
+                's3',
+                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+                aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+                region_name=os.getenv("AWS_REGION", "us-east-1")
+            )
+            s3_key = f"rag-documents/{file.filename}"
             
-        logger.info(f"Admin: Uploading document {file.filename}...")
+            from io import BytesIO
+            s3.upload_fileobj(BytesIO(file_content), s3_bucket, s3_key)
+            
+            region = os.getenv("AWS_REGION", "us-east-1")
+            file_url = f"https://{s3_bucket}.s3.{region}.amazonaws.com/{s3_key}"
+            
+            logger.info(f"Admin: Uploaded {file.filename} to S3 ({s3_key})")
+            
+            # Ingest from S3 into ChromaDB
+            rag_service.ingest_file(s3_key=s3_key)
+        else:
+            # --- Local Fallback Path ---
+            os.makedirs("./data", exist_ok=True)
+            file_path = f"./data/{file.filename}"
+            
+            with open(file_path, "wb") as buffer:
+                buffer.write(file_content)
+                
+            logger.info(f"Admin: Saved {file.filename} locally")
+            
+            # Ingest local file into ChromaDB
+            rag_service.ingest_file(file_path=file_path)
         
-        # Trigger single-file RAG processing (Optimized)
-        rag_service.ingest_file(file_path)
-        
-        # Save metadata to DB
+        # Save metadata to DB (works for both S3 and local)
         doc = Document(
             file_name=file.filename,
+            s3_key=s3_key,
+            file_url=file_url,
+            file_size=file_size,
             source="upload",
             status="processed"
         )
         db.add(doc)
         db.commit()
         logger.info(f"Admin: Document {file.filename} indexed and tracked successfully.")
-        return {"message": "Document uploaded and processed successfully"}
+        return {
+            "message": "Document uploaded and processed successfully",
+            "file_url": file_url,
+            "storage": "s3" if s3_bucket else "local"
+        }
     except Exception as e:
         logger.error(f"Upload failed: {e}", exc_info=True)
         db.rollback()
@@ -1204,8 +1242,11 @@ def get_admin_documents(db: Session = Depends(get_db), current_admin: AdminUser 
         {
             "id": d.id,
             "file_name": d.file_name,
+            "file_url": d.file_url,
+            "file_size": d.file_size,
             "source": d.source,
             "status": d.status,
+            "storage": "s3" if d.s3_key else "local",
             "created_at": d.created_at.replace(tzinfo=timezone.utc).isoformat() if d.created_at else None
         } for d in docs
     ]
@@ -1219,19 +1260,34 @@ def delete_admin_document(doc_id: int, db: Session = Depends(get_db), current_ad
     # 1. Delete from ChromaDB
     rag_service.delete_document(doc.file_name)
     
-    # 2. Delete from Filesystem
-    file_path = f"./data/{doc.file_name}"
-    if os.path.exists(file_path):
+    # 2. Delete from storage (S3 or local)
+    if doc.s3_key:
         try:
-            os.remove(file_path)
+            import boto3
+            s3 = boto3.client(
+                's3',
+                aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+                aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+                region_name=os.getenv("AWS_REGION", "us-east-1")
+            )
+            s3.delete_object(Bucket=os.getenv("S3_BUCKET_NAME"), Key=doc.s3_key)
+            logger.info(f"Deleted {doc.s3_key} from S3")
         except Exception as e:
-            logger.error(f"Failed to delete file {file_path}: {e}")
+            logger.error(f"Failed to delete from S3: {e}")
+    else:
+        file_path = f"./data/{doc.file_name}"
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception as e:
+                logger.error(f"Failed to delete file {file_path}: {e}")
     
     # 3. Delete from DB
     db.delete(doc)
     db.commit()
     
     return {"message": "Document deleted successfully"}
+
 
 # Admin Questions Management
 class QuestionCreate(BaseModel):

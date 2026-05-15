@@ -9,8 +9,12 @@ import os
 import json
 import chromadb
 import traceback
+import boto3
+import tempfile
 from chromadb.utils import embedding_functions
 from pypdf import PdfReader
+from sqlalchemy.orm import Session
+from database import Document, DocumentStatus, SessionLocal
 
 # ---------------------------------------------------------
 # Configuration
@@ -18,6 +22,12 @@ from pypdf import PdfReader
 CHROMA_DB_PATH = "./chroma_db"
 COLLECTION_NAME = "crypto_knowledge"
 DATA_FOLDER = "./data"
+
+# S3 Config
+AWS_ACCESS_KEY = os.getenv("AWS_ACCESS_KEY_ID")
+AWS_SECRET_KEY = os.getenv("AWS_SECRET_ACCESS_KEY")
+AWS_REGION = os.getenv("AWS_REGION", "us-east-1")
+S3_BUCKET = os.getenv("S3_BUCKET_NAME")
 
 # Global client/collection reference
 _collection = None
@@ -57,33 +67,64 @@ def initialize_rag():
         print(f"RAG Initialization Failed: {e}")
         traceback.print_exc()
 
-def ingest_file(file_path: str):
-    """Ingests a single file into the vector database."""
+def ingest_file(file_path: str = None, s3_key: str = None):
+    """Ingests a file from local path OR S3 into the vector database."""
     global _collection
     if _collection is None:
         initialize_rag()
     
-    filename = os.path.basename(file_path)
+    filename = s3_key if s3_key else os.path.basename(file_path)
+    temp_local_path = None
     
-    text = ""
-    if filename.endswith(".pdf"):
-        text = _read_pdf(file_path)
-    elif filename.endswith(".txt") or filename.endswith(".md"):
-        try:
-            with open(file_path, "r", encoding="utf-8") as f:
-                text = f.read()
-        except Exception:
-            pass
-    
-    if text:
-        # Check if this source exists
-        existing = _collection.get(where={"source": filename})
-        if existing and len(existing['ids']) > 0:
-            print(f"RAG: {filename} already exists in vector DB. Skipping.")
-            return True
+    try:
+        if s3_key and S3_BUCKET:
+            # Download from S3 to temp file
+            s3 = boto3.client(
+                's3',
+                aws_access_key_id=AWS_ACCESS_KEY,
+                aws_secret_access_key=AWS_SECRET_KEY,
+                region_name=AWS_REGION
+            )
+            suffix = os.path.splitext(s3_key)[1]
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as tmp:
+                print(f"RAG: Downloading {s3_key} from S3...")
+                s3.download_fileobj(S3_BUCKET, s3_key, tmp)
+                temp_local_path = tmp.name
+            target_path = temp_local_path
+        else:
+            target_path = file_path
 
-        _add_text_to_db(filename, text)
-        return True
+        if not target_path or not os.path.exists(target_path):
+            return False
+
+        text = ""
+        if filename.lower().endswith(".pdf"):
+            text = _read_pdf(target_path)
+        elif filename.lower().endswith((".txt", ".md")):
+            try:
+                with open(target_path, "r", encoding="utf-8") as f:
+                    text = f.read()
+            except Exception:
+                pass
+        
+        if text:
+            # Check if this source exists in Chroma
+            existing = _collection.get(where={"source": filename})
+            if existing and len(existing['ids']) > 0:
+                print(f"RAG: {filename} already exists in vector DB. Skipping.")
+                return True
+
+            _add_text_to_db(filename, text)
+            return True
+            
+    except Exception as e:
+        print(f"RAG Ingestion Error ({filename}): {e}")
+        return False
+    finally:
+        # Cleanup temp file
+        if temp_local_path and os.path.exists(temp_local_path):
+            os.remove(temp_local_path)
+            
     return False
 
 def _ingest_folder(folder_path):
@@ -180,32 +221,24 @@ def _add_text_to_db(source_name, text):
         print(f"RAG: Indexed {source_name} ({len(chunks)} smart chunks)")
 
 def get_sync_status():
-    """Calculates the percentage of files in ./data that are indexed."""
-    global _collection
-    if _collection is None:
-        initialize_rag()
-    
-    if not os.path.exists(DATA_FOLDER):
+    """Calculates synchronization status based on DB Document tracking."""
+    # Lead Engineer Refactor: Use DB as source of truth instead of local filesystem
+    db = SessionLocal()
+    try:
+        total_docs = db.query(Document).count()
+        indexed_docs = db.query(Document).filter(Document.status == DocumentStatus.PROCESSED).count()
+        
+        percent = int((indexed_docs / total_docs) * 100) if total_docs > 0 else 100
+        return {
+            "percent": percent,
+            "total_files": total_docs,
+            "indexed_files": indexed_docs
+        }
+    except Exception as e:
+        print(f"RAG: Error getting sync status: {e}")
         return {"percent": 0, "total_files": 0, "indexed_files": 0}
-    
-    files = [f for f in os.listdir(DATA_FOLDER) if f.lower().endswith(('.pdf', '.txt', '.md'))]
-    if not files:
-        return {"percent": 100, "total_files": 0, "indexed_files": 0}
-    
-    indexed_sources = set()
-    # This is a bit slow for massive DBs, but fine for this scale
-    # Better: store indexed filenames in a local cache or use collection.get() with where
-    for filename in files:
-        res = _collection.get(where={"source": filename}, limit=1)
-        if res and res['ids']:
-            indexed_sources.add(filename)
-            
-    percent = int((len(indexed_sources) / len(files)) * 100)
-    return {
-        "percent": percent,
-        "total_files": len(files),
-        "indexed_files": len(indexed_sources)
-    }
+    finally:
+        db.close()
 
 def search_knowledge_base(query: str, n_results: int = 3) -> str:
     """Searches the vector DB for relevant context."""

@@ -128,6 +128,9 @@ class Document(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     file_name = Column(String(255), nullable=False)
+    s3_key = Column(String(512), nullable=True)
+    file_url = Column(String(1024), nullable=True)
+    file_size = Column(Integer, nullable=True)
     source = Column(Enum(DocumentSource), default=DocumentSource.UPLOAD)
     status = Column(Enum(DocumentStatus), default=DocumentStatus.PROCESSED)
     created_at = Column(DateTime, server_default=func.now())
