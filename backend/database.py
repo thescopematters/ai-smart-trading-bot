@@ -1,23 +1,21 @@
 import os
 import uuid
 import enum
-from dotenv import load_dotenv
-
-load_dotenv()
-
 from sqlalchemy import (
     create_engine, Column, String, Integer, DateTime, ForeignKey, 
     Boolean, Text, JSON, func, Numeric, Enum, UniqueConstraint, Index
 )
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
+from dotenv import load_dotenv
 
-# DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://admin:password@127.0.0.1:3306/clear_termite_db")
-DATABASE_URL = os.getenv("DATABASE_URL") or os.getenv("MYSQL_URL", "mysql+pymysql://root:root@127.0.0.1:3307/crypto_db")
+load_dotenv()
+
+DATABASE_URL = os.getenv("DATABASE_URL", "mysql+pymysql://admin:password@127.0.0.1:3306/clear_termite_db")
 
 if DATABASE_URL and DATABASE_URL.startswith("mysql://"):
     DATABASE_URL = DATABASE_URL.replace("mysql://", "mysql+pymysql://", 1)
-
+    
 engine = create_engine(DATABASE_URL, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -128,9 +126,6 @@ class Document(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     file_name = Column(String(255), nullable=False)
-    s3_key = Column(String(512), nullable=True)
-    file_url = Column(String(1024), nullable=True)
-    file_size = Column(Integer, nullable=True)
     source = Column(Enum(DocumentSource), default=DocumentSource.UPLOAD)
     status = Column(Enum(DocumentStatus), default=DocumentStatus.PROCESSED)
     created_at = Column(DateTime, server_default=func.now())
