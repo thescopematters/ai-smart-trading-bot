@@ -1,21 +1,17 @@
-version: "3.9"
-
 services:
 
   # ─────────────────────────────────────────
-  # 1. MySQL Database
+  # 1. MySQL Database (Internal Only)
   # ─────────────────────────────────────────
   mysql:
     image: mysql:8.0
     container_name: crypto_mysql
-    restart: always
+    restart: unless-stopped
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-    ports:
-      - "3306:3306"
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
@@ -23,22 +19,55 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - crypto_network
 
   # ─────────────────────────────────────────
-  # 2. AI Backend (FastAPI + Python)
+  # 2. PostgreSQL Database (Internal Only)
+  # ─────────────────────────────────────────
+  postgres:
+    image: postgres:15
+    container_name: crypto_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: cryptox_db
+      POSTGRES_USER: cryptox_user
+      POSTGRES_PASSWORD: cryptoxpass123
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cryptox_user -d cryptox_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - crypto_network
+
+  # ─────────────────────────────────────────
+  # 3. AI Backend (FastAPI)
   # ─────────────────────────────────────────
   ai-backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: crypto_ai_backend
-    restart: always
+    restart: unless-stopped
     env_file:
       - ./backend/.env
     environment:
       DATABASE_URL: mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}
+      WHISPER_EXE_PATH: /app/whisper.cpp/build/bin/whisper-cli
+      WHISPER_MODEL_PATH: /app/whisper.cpp/models/ggml-base.en.bin
     ports:
       - "8000:8000"
     depends_on:
@@ -47,73 +76,129 @@ services:
     volumes:
       - ai_backend_data:/app/data
       - chroma_data:/app/chroma_db
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - crypto_network
 
   # ─────────────────────────────────────────
-  # 3. Cryptox Exchange Backend (NestJS)
+  # 4. Exchange Backend (NestJS)
   # ─────────────────────────────────────────
   exchange-backend:
     build:
       context: ./cryptox/backend
       dockerfile: Dockerfile
     container_name: crypto_exchange_backend
-    restart: always
+    restart: unless-stopped
     env_file:
       - ./cryptox/backend/.env
     ports:
       - "3001:3001"
     depends_on:
-      mysql:
+      postgres:
         condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - crypto_network
 
   # ─────────────────────────────────────────
-  # 4. Chatbot UI (React/Vite)
+  # 5. Chatbot UI (React/Vite)
   # ─────────────────────────────────────────
   chatbot-ui:
     build:
       context: ./chatbot-ui
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${CHATBOT_API_URL}
     container_name: crypto_chatbot_ui
-    restart: always
+    restart: unless-stopped
     ports:
       - "3000:80"
     depends_on:
       - ai-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - crypto_network
 
   # ─────────────────────────────────────────
-  # 5. Admin UI (React/Vite)
+  # 6. Admin UI (React/Vite)
   # ─────────────────────────────────────────
   admin-ui:
     build:
       context: ./admin-ui
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${CHATBOT_API_URL}
     container_name: crypto_admin_ui
-    restart: always
+    restart: unless-stopped
     ports:
       - "3002:80"
     depends_on:
       - ai-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - crypto_network
 
   # ─────────────────────────────────────────
-  # 6. Cryptox Exchange Frontend (React/Vite)
+  # 7. Exchange Frontend (React/Vite)
   # ─────────────────────────────────────────
   exchange-frontend:
     build:
       context: ./cryptox/frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${EXCHANGE_API_URL}
     container_name: crypto_exchange_frontend
-    restart: always
+    restart: unless-stopped
     ports:
       - "3003:80"
     depends_on:
       - exchange-backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - crypto_network
+
+  # ─────────────────────────────────────────
+  # 8. Database Management (phpMyAdmin)
+  # ─────────────────────────────────────────
+  phpmyadmin:
+    image: phpmyadmin:latest
+    container_name: crypto_phpmyadmin
+    restart: unless-stopped
+    ports:
+      - "8085:80"
+    environment:
+      PMA_HOST: mysql
+      PMA_USER: ${MYSQL_USER}
+      PMA_PASSWORD: ${MYSQL_PASSWORD}
+      UPLOAD_LIMIT: 64M
+    depends_on:
+      mysql:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
     networks:
       - crypto_network
 
@@ -121,6 +206,7 @@ volumes:
   mysql_data:
   ai_backend_data:
   chroma_data:
+  postgres_data:
 
 networks:
   crypto_network:

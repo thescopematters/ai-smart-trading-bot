@@ -212,7 +212,6 @@ def register(request: Request, data: RegisterRequest, db: Session = Depends(get_
         username=data.username,
         password_hash=get_password_hash(data.password),
         display_name=data.display_name or data.username,
-        role="user",
         is_guest=False
     )
     db.add(user)
