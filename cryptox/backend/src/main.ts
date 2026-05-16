@@ -11,6 +11,8 @@ async function bootstrap() {
   app.enableCors({
     origin: [
       'http://localhost:5173',
+      'http://localhost:3003',
+      'http://3.82.203.121:3003',
       'https://cryptox-frontend-psi.vercel.app',
     ],
     credentials: true,
