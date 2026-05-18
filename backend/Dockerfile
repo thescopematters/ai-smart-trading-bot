@@ -25,11 +25,9 @@ RUN git clone https://github.com/ggerganov/whisper.cpp.git /build/whisper.cpp &&
     cmake --build build --config Release && \
     bash models/download-ggml-model.sh base.en
 
-# ── Python deps: install CPU-only PyTorch, then rest, then strip GPU-specific triton ──
+# ── Python deps: install requirements cleanly ──
 COPY requirements.txt .
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu && \
-    pip install --default-timeout=100 --no-cache-dir -r requirements.txt && \
-    pip uninstall -y triton
+RUN pip install --default-timeout=100 --no-cache-dir -r requirements.txt
 
 # ============================================
 # STAGE 2: Production — lightweight runtime

@@ -3,18 +3,11 @@ uvicorn
 python-dotenv
 requests
 google-adk
-openai-whisper
-pyttsx3
 pywin32; sys_platform == 'win32'
-pydub
 python-multipart
-torch
-scipy
 chromadb>=0.4.0
 pydantic-settings
-sentence-transformers
 pypdf
-google-generativeai
 numpy
 sqlalchemy
 pymysql
