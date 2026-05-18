@@ -86,9 +86,7 @@ services:
   # 4. Exchange Backend (NestJS)
   # ─────────────────────────────────────────
   exchange-backend:
-    build:
-      context: ./cryptox/backend
-      dockerfile: Dockerfile
+    image: ritikajangra19/crypto-exchange-backend:v1
     container_name: crypto_exchange_backend
     restart: unless-stopped
     env_file:
@@ -110,11 +108,7 @@ services:
   # 5. Chatbot UI (React/Vite)
   # ─────────────────────────────────────────
   chatbot-ui:
-    build:
-      context: ./chatbot-ui
-      dockerfile: Dockerfile
-      args:
-        VITE_API_URL: ${CHATBOT_API_URL}
+    image: ritikajangra19/crypto-chatbot-ui:v1
     container_name: crypto_chatbot_ui
     restart: unless-stopped
     ports:
@@ -133,11 +127,7 @@ services:
   # 6. Admin UI (React/Vite)
   # ─────────────────────────────────────────
   admin-ui:
-    build:
-      context: ./admin-ui
-      dockerfile: Dockerfile
-      args:
-        VITE_API_URL: ${CHATBOT_API_URL}
+    image: ritikajangra19/crypto-admin-ui:v1
     container_name: crypto_admin_ui
     restart: unless-stopped
     ports:
@@ -156,11 +146,7 @@ services:
   # 7. Exchange Frontend (React/Vite)
   # ─────────────────────────────────────────
   exchange-frontend:
-    build:
-      context: ./cryptox/frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_URL: ${EXCHANGE_API_URL}
+    image: ritikajangra19/crypto-exchange-frontend:v1
     container_name: crypto_exchange_frontend
     restart: unless-stopped
     ports:
