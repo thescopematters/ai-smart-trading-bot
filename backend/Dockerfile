@@ -21,7 +21,7 @@ WORKDIR /build
 # ── Whisper.cpp: clone, compile, and download model ──
 RUN git clone https://github.com/ggerganov/whisper.cpp.git /build/whisper.cpp && \
     cd /build/whisper.cpp && \
-    cmake -B build && \
+    cmake -B build -DBUILD_SHARED_LIBS=OFF && \
     cmake --build build --config Release && \
     bash models/download-ggml-model.sh base.en
 
