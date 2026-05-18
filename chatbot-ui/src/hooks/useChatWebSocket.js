@@ -27,8 +27,6 @@ const DEFAULT_GREETING = { id: 'greeting', text: "Hello! I'm your crypto AI assi
  * @param {boolean} isActive - Whether the user is actively viewing this chat (suppresses notifications if true)
  */
 export const useChatWebSocket = (url, sessionId, userPrefix = 'guest', isActive = true) => {
-    const isGuest = userPrefix === 'guest';
-
     const [isConnected, setIsConnected] = useState(false);
     const [messages, setMessages] = useState([DEFAULT_GREETING]);
     const [isTyping, setIsTyping] = useState(false);
@@ -38,7 +36,16 @@ export const useChatWebSocket = (url, sessionId, userPrefix = 'guest', isActive 
     const socketRef = useRef(null);
     const reconnectTimeoutRef = useRef(null);
 
-    // When session or user changes, reset the UI to a clean state.
+    // Keep dynamic configurations in refs to insulate WebSocket lifecycle from render-induced reconnects
+    const urlRef = useRef(url);
+    const userPrefixRef = useRef(userPrefix);
+
+    useEffect(() => {
+        urlRef.current = url;
+        userPrefixRef.current = userPrefix;
+    }, [url, userPrefix]);
+
+    // When session changes, reset the UI to a clean state.
     // For users, the 'history' event from the server will populate messages.
     useEffect(() => {
         if (reconnectTimeoutRef.current) {
@@ -48,7 +55,7 @@ export const useChatWebSocket = (url, sessionId, userPrefix = 'guest', isActive 
         setMessages([DEFAULT_GREETING]);
         setIsTyping(false);
         setIsSessionEnd(false);
-    }, [sessionId, userPrefix]);
+    }, [sessionId]);
 
     const connect = useCallback(() => {
         if (!sessionId) return;
@@ -59,8 +66,11 @@ export const useChatWebSocket = (url, sessionId, userPrefix = 'guest', isActive 
             reconnectTimeoutRef.current = null;
         }
 
+        const isGuest = userPrefixRef.current === 'guest';
+        const currentUrl = urlRef.current;
+
         // Build the WS URL: ws://localhost:8000/ws/chat?token=XXX → ws://localhost:8000/ws/chat/SESSION_ID?token=XXX
-        const [baseWithPath, queryString] = url.split('?');
+        const [baseWithPath, queryString] = currentUrl.split('?');
         const cleanBase = baseWithPath.replace(/\/user-session-1$/, '').replace(/\/$/, '');
         const wsUrl = queryString ? `${cleanBase}/${sessionId}?${queryString}` : `${cleanBase}/${sessionId}`;
 
@@ -93,11 +103,14 @@ export const useChatWebSocket = (url, sessionId, userPrefix = 'guest', isActive 
             let data;
             try { data = JSON.parse(event.data); } catch { return; }
 
+            const currentPrefix = userPrefixRef.current;
+            const currentIsGuest = currentPrefix === 'guest';
+
             switch (data.type) {
 
                 // USER ONLY: Backend sends full chat history immediately on connect
                 case 'history': {
-                    if (!isGuest && data.messages?.length > 0) {
+                    if (!currentIsGuest && data.messages?.length > 0) {
                         const mapped = data.messages.map(msg => ({
                             id: msg.id,
                             text: msg.content,
@@ -146,7 +159,7 @@ export const useChatWebSocket = (url, sessionId, userPrefix = 'guest', isActive 
                     // Notify only when user is NOT actively looking at the chat
                     if (document.hidden || !isActive) {
                         playNotificationSound();
-                        localStorage.setItem(`crypto_unread_${userPrefix}_${sessionId}`, 'true');
+                        localStorage.setItem(`crypto_unread_${currentPrefix}_${sessionId}`, 'true');
                         if (document.hidden) showBrowserNotification('New Message from CryptoBot', data.text);
                     }
                     window.dispatchEvent(new Event('chat_history_updated'));
@@ -159,7 +172,7 @@ export const useChatWebSocket = (url, sessionId, userPrefix = 'guest', isActive 
                     setIsTyping(false);
                     if (document.hidden || !isActive) {
                         playNotificationSound();
-                        localStorage.setItem(`crypto_unread_${userPrefix}_${sessionId}`, 'true');
+                        localStorage.setItem(`crypto_unread_${currentPrefix}_${sessionId}`, 'true');
                         if (document.hidden) showBrowserNotification('New Message from CryptoBot', data.text);
                     }
                     window.dispatchEvent(new Event('chat_history_updated'));
@@ -189,7 +202,7 @@ export const useChatWebSocket = (url, sessionId, userPrefix = 'guest', isActive 
                 default: break;
             }
         };
-    }, [url, sessionId, userPrefix, isGuest, isActive]);
+    }, [sessionId, isActive]);
 
     // Heartbeat to keep connection alive and sync visibility
     useEffect(() => {
