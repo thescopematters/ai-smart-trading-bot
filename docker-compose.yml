@@ -57,9 +57,7 @@ services:
   # 3. AI Backend (FastAPI)
   # ─────────────────────────────────────────
   ai-backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
+    image: ritikajangra19/crypto-ai-backend:v1
     container_name: crypto_ai_backend
     restart: unless-stopped
     env_file:
