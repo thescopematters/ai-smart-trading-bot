@@ -67,7 +67,7 @@ services:
       WHISPER_EXE_PATH: /app/whisper.cpp/build/bin/whisper-cli
       WHISPER_MODEL_PATH: /app/whisper.cpp/models/ggml-base.en.bin
     ports:
-      - "8000:80"
+      - "8000:8000"
     depends_on:
       mysql:
         condition: service_healthy
