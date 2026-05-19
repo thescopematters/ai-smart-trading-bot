@@ -1,62 +1,84 @@
 # ============================================
-# STAGE 1: Builder — compile whisper.cpp and
-# install all Python dependencies
+# STAGE 1: Builder
 # ============================================
 FROM python:3.11-slim AS builder
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Install build-time-only tools (git, cmake, gcc, etc.) with --no-install-recommends
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    git \
-    cmake \
-    curl \
-    wget \
-    build-essential \
+    git cmake curl wget build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
 
-# ── Whisper.cpp: clone, compile, and download model ──
-RUN git clone https://github.com/ggerganov/whisper.cpp.git /build/whisper.cpp && \
+# ── whisper.cpp: shallow clone + build only the CLI target ──
+RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git /build/whisper.cpp && \
     cd /build/whisper.cpp && \
-    cmake -B build -DBUILD_SHARED_LIBS=OFF && \
-    cmake --build build --config Release && \
+    cmake -B build \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DWHISPER_BUILD_TESTS=OFF \
+        -DWHISPER_BUILD_EXAMPLES=OFF && \
+    cmake --build build --config Release --target whisper-cli && \
     bash models/download-ggml-model.sh base.en
 
-# ── Python deps: install requirements cleanly ──
+# ── Python deps ──
 COPY requirements.txt .
-RUN pip install --default-timeout=100 --no-cache-dir -r requirements.txt
+
+# ── FIX 2: Pre-pin to /install so pip respects them when resolving requirements ──
+RUN pip install --no-cache-dir --prefix=/install \
+    "pyarrow==14.0.2" \
+    "onnxruntime==1.17.3"
+
+# Install everything into /install prefix
+RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+
+# ── Surgical cleanup ──
+# ── FIX 1: Correct find syntax for .pyc/.pyo ──
+RUN find /install -type d -name "kubernetes"              -exec rm -rf {} + 2>/dev/null || true && \
+    find /install -type d -name "vertexai"                -exec rm -rf {} + 2>/dev/null || true && \
+    find /install -type d -name "google_cloud_aiplatform" -exec rm -rf {} + 2>/dev/null || true && \
+    find /install -type d -name "tests"                   -exec rm -rf {} + 2>/dev/null || true && \
+    find /install -type d -name "__pycache__"             -exec rm -rf {} + 2>/dev/null || true && \
+    find /install \( -name "*.pyc" -o -name "*.pyo" \)    -exec rm -f  {} + 2>/dev/null || true
+
 
 # ============================================
-# STAGE 2: Production — lightweight runtime
+# STAGE 2: Production
 # ============================================
 FROM python:3.11-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Install only the essential runtime libraries with --no-install-recommends
-# (Saves massive space by not pulling in recommended/suggested GUI/X11 dependencies)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ffmpeg \
-    espeak \
-    libespeak1 \
+    libgomp1 \
     curl \
+    xz-utils \
     && rm -rf /var/lib/apt/lists/*
+
+# ── Static ffmpeg (~70 MB vs apt's 464 MB) ──
+RUN curl -L https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz \
+    | tar -xJ --strip-components=1 -C /usr/local/bin \
+        --wildcards "*/ffmpeg" "*/ffprobe" && \
+    chmod +x /usr/local/bin/ffmpeg /usr/local/bin/ffprobe
 
 WORKDIR /app
 
-# ── Copy compiled whisper.cpp binary + model from builder ──
-COPY --from=builder /build/whisper.cpp/build/bin/whisper-cli /app/whisper.cpp/build/bin/whisper-cli
-COPY --from=builder /build/whisper.cpp/models/ggml-base.en.bin /app/whisper.cpp/models/ggml-base.en.bin
+# ── Whisper binary + model ──
+COPY --from=builder /build/whisper.cpp/build/bin/whisper-cli \
+    /app/whisper.cpp/build/bin/whisper-cli
+COPY --from=builder /build/whisper.cpp/models/ggml-base.en.bin \
+    /app/whisper.cpp/models/ggml-base.en.bin
 
-# ── Copy all installed Python packages from builder ──
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /usr/local/bin /usr/local/bin
+# ── Python site-packages ──
+COPY --from=builder /install/lib/python3.11/site-packages \
+    /usr/local/lib/python3.11/site-packages
 
-# ── Copy application source code ──
+# ── FIX 3: Copy all installed bin entries, not just uvicorn ──
+COPY --from=builder /install/bin /usr/local/bin
+
+# ── App source (last = best cache behaviour) ──
 COPY . .
 
 EXPOSE 8000
