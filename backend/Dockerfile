@@ -18,7 +18,7 @@ RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git /build/whis
     cmake -B build \
         -DBUILD_SHARED_LIBS=OFF \
         -DWHISPER_BUILD_TESTS=OFF \
-        -DWHISPER_BUILD_EXAMPLES=OFF && \
+        -DWHISPER_BUILD_EXAMPLES=ON && \
     cmake --build build --config Release --target whisper-cli && \
     bash models/download-ggml-model.sh base.en
 
