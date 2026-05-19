@@ -15,6 +15,7 @@ from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from dotenv import load_dotenv
+from decimal import Decimal
 
 # Lead Engineer Fix: Sanitize environment for null characters (common Windows shell issue)
 for k, v in list(os.environ.items()):
@@ -39,7 +40,7 @@ except ImportError:
     from . import rag_service
 
 # Import DB and Auth
-from database import get_db, SessionLocal, User, AdminUser, ChatSession, ChatMessage, DefaultQuestion, Document
+from database import get_db, SessionLocal, User, AdminUser, ChatSession, ChatMessage, DefaultQuestion, Document, PaperWallet
 from auth import get_password_hash, verify_password, create_access_token, get_current_user, get_current_admin, limiter
 
 # Import Gemini error types for smart retry logic
@@ -226,8 +227,19 @@ def register(request: Request, data: RegisterRequest, db: Session = Depends(get_
     db.commit()
     db.refresh(user)
     
-    # Handle Session Migration
-    # Session migration disabled
+    # Create initial paper wallet
+    initial_cash = Decimal("100000.00")
+    wallet = PaperWallet(
+        user_id=user.id,
+        cash_balance=initial_cash,
+        initial_balance=initial_cash,
+        currency="USD",
+        unrealized_pnl=Decimal("0"),
+        total_equity=initial_cash
+    )
+    db.add(wallet)
+    db.commit()
+
     access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer", "user": {"id": user.id, "email": user.email, "username": user.username, "role": "user"}}
 

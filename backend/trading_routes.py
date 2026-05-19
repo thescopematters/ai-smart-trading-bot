@@ -94,6 +94,21 @@ def get_quote(
             PaperWallet.user_id == current_user.id
         ).first()
 
+        if not wallet:
+            initial_cash = Decimal("100000.00")
+            wallet = PaperWallet(
+                user_id=current_user.id,
+                cash_balance=initial_cash,
+                initial_balance=initial_cash,
+                currency="USD",
+                unrealized_pnl=Decimal("0"),
+                total_equity=initial_cash
+            )
+            db.add(wallet)
+            db.commit()
+            db.refresh(wallet)
+            logger.info(f"Auto-initialized paper wallet via route for user {current_user.id}")
+
         wallet_info = {}
         if wallet:
             balance = Decimal(wallet.cash_balance)
@@ -153,7 +168,19 @@ def place_order(
             PaperWallet.user_id == current_user.id
         ).first()
         if not wallet:
-            raise HTTPException(status_code=404, detail="Wallet not found")
+            initial_cash = Decimal("100000.00")
+            wallet = PaperWallet(
+                user_id=current_user.id,
+                cash_balance=initial_cash,
+                initial_balance=initial_cash,
+                currency="USD",
+                unrealized_pnl=Decimal("0"),
+                total_equity=initial_cash
+            )
+            db.add(wallet)
+            db.commit()
+            db.refresh(wallet)
+            logger.info(f"Auto-initialized paper wallet via order route for user {current_user.id}")
 
         cash_balance = Decimal(wallet.cash_balance)
         realized_pnl = Decimal("0")

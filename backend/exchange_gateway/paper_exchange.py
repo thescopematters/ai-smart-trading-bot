@@ -16,6 +16,23 @@ class PaperExchange(BaseExchange):
     def __init__(self, db: Session, current_user: User):
         self.db = db
         self.user = current_user
+        
+        # Auto-initialize paper wallet if it doesn't exist
+        if self.db and self.user:
+            wallet = self.db.query(PaperWallet).filter(PaperWallet.user_id == self.user.id).first()
+            if not wallet:
+                initial_cash = Decimal("100000.00")
+                new_wallet = PaperWallet(
+                    user_id=self.user.id,
+                    cash_balance=initial_cash,
+                    initial_balance=initial_cash,
+                    currency="USD",
+                    unrealized_pnl=Decimal("0"),
+                    total_equity=initial_cash
+                )
+                self.db.add(new_wallet)
+                self.db.commit()
+                logger.info(f"Auto-initialized paper wallet with $100k for user {self.user.id}")
 
     def fetch_live_price(self, symbol: str) -> Decimal:
         url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
