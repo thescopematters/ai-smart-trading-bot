@@ -75,6 +75,7 @@ mcp_toolset = MCPToolset(
         server_params=StdioServerParameters(
             command=PYTHON_EXE,
             args=[MCP_SERVER_PATH],
+            env=dict(os.environ),
         ),
         timeout=30.0,
     )
@@ -86,6 +87,7 @@ trading_toolset = MCPToolset(
         server_params=StdioServerParameters(
             command=PYTHON_EXE,
             args=[MCP_TRADING_SERVER_PATH],
+            env=dict(os.environ),
         ),
         timeout=30.0,
     )
@@ -96,6 +98,7 @@ execution_toolset = MCPToolset(
         server_params=StdioServerParameters(
             command=PYTHON_EXE,
             args=[MCP_EXECUTION_SERVER_PATH],
+            env=dict(os.environ),
         ),
         timeout=30.0,
     )
