@@ -10,6 +10,7 @@ from exceptions import RiskViolationError, InvalidWorkflowTransitionError
 from typing import Any
 import logging
 import asyncio
+import traceback
 from sqlalchemy import func as sql_func
 
 logger = logging.getLogger("TradingWorkflow")
@@ -27,8 +28,9 @@ class TradingWorkflowService:
         price = 0.0
         risk_report = None
         
-        # Get quote for risk assessment
-        with SessionLocal() as db:
+        # Get quote for risk assessment — use explicit session management
+        db = SessionLocal()
+        try:
             user = db.query(User).filter(User.id == user_id).first()
             if not user:
                 return "Error: User context missing. Please login again."
@@ -49,7 +51,7 @@ class TradingWorkflowService:
                 PaperTrade.executed_at >= today_start
             ).scalar() or 0.0
             
-            # Risk Assessment (Pass daily_pnl)
+            # Risk Assessment
             risk_report = risk_engine.assess_trade(symbol, quantity, price, side, balance, daily_pnl)
             
             state = TradeState(
@@ -64,8 +66,14 @@ class TradingWorkflowService:
             
             await orchestrator.initiate_workflow(state)
             audit_logger.log_event("INITIATE_TRADE", session_id, user_id, state.workflow_id, payload=state.dict())
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error in initiate_trade: {e}\n{traceback.format_exc()}")
+            raise
+        finally:
+            db.close()
         
-        # Variables are now safely accessible outside the 'with' block
+        # Build response — variables are safely accessible outside the try block
         response = f"**Trade Analysis for {side} {quantity} {symbol}**:\n"
         response += f"- Current Price: ${price:,.2f}\n"
         response += f"- Risk Status: **{risk_report.action}**\n"
@@ -84,7 +92,7 @@ class TradingWorkflowService:
         """Processes the order type and moves to confirmation step."""
         state = await orchestrator.get_active_workflow(session_id)
         if not state:
-            return "No active trade found."
+            return "No active trade found. Please start a new trade."
 
         order_type = order_type.upper()
         
@@ -107,38 +115,55 @@ class TradingWorkflowService:
     async def confirm_and_execute(self, session_id: str, db: Any, user: Any, token: str = ""):
         """The final execution trigger after user confirmation."""
         state = await orchestrator.get_active_workflow(session_id)
-        if not state or state.status != WorkflowState.AWAITING_CONFIRMATION:
-            return "No order waiting for confirmation. Please start over."
+        if not state:
+            return "No active trade found for this session. Please start a new trade."
+        
+        if state.status != WorkflowState.AWAITING_CONFIRMATION:
+            return f"Trade is in state '{state.status}', not awaiting confirmation. Please check the workflow status."
 
-        await orchestrator.transition(session_id, WorkflowState.EXECUTING)
-        
-        # Execute via service (Idempotent)
-        result = execution_service.execute_trade(db, user, state, state.confirmation_token, token)
-        
-        if result.status == "FAILED":
-            await orchestrator.transition(session_id, WorkflowState.FAILED)
-            audit_logger.log_event("EXECUTION_FAILED", session_id, state.user_id, state.workflow_id, result=result.dict())
-            return f"Execution Failed: {result.error}"
+        logger.info(f"Executing trade: workflow={state.workflow_id}, symbol={state.symbol}, qty={state.quantity}, side={state.side}, order_type={state.order_type}")
 
-        # Start live monitoring as a supervised task
-        order_id = result.order_id
-        task_registry.register(
-            f"monitor_order_{order_id}", 
-            execution_monitor.monitor_order(order_id),
-            on_failure=lambda e: audit_logger.log_event("MONITOR_FAILED", session_id, state.user_id, state.workflow_id, result={"error": str(e)})
-        )
+        state = await orchestrator.transition(session_id, WorkflowState.EXECUTING)
         
-        if result.status == "FILLED":
-            await orchestrator.transition(session_id, WorkflowState.FILLED)
-        else:
-            # Still pending (e.g. Limit order)
-            pass 
+        try:
+            # Execute via service (Idempotent)
+            result = await execution_service.execute_trade(db, user, state, state.confirmation_token, token)
+            
+            if result.status == "FAILED":
+                await orchestrator.transition(session_id, WorkflowState.FAILED)
+                audit_logger.log_event("EXECUTION_FAILED", session_id, state.user_id, state.workflow_id, result=result.dict())
+                return f"❌ Execution Failed: {result.error}"
 
-        audit_logger.log_event("EXECUTION_SUCCESS", session_id, state.user_id, state.workflow_id, result=result.dict())
-        
-        response = f"✅ Order Sent! (ID: {order_id})\n"
-        response += f"Status: {result.status}\n"
-        response += "I am now monitoring the live order stream for confirmation..."
-        return response
+            # Start live monitoring as a supervised task
+            order_id = result.order_id
+            task_registry.register(
+                f"monitor_order_{order_id}", 
+                execution_monitor.monitor_order(order_id),
+                on_failure=lambda e: audit_logger.log_event("MONITOR_FAILED", session_id, state.user_id, state.workflow_id, result={"error": str(e)})
+            )
+            
+            if result.status == "FILLED":
+                await orchestrator.transition(session_id, WorkflowState.FILLED)
+            
+            audit_logger.log_event("EXECUTION_SUCCESS", session_id, state.user_id, state.workflow_id, result=result.dict())
+            
+            response = f"✅ Order Sent! (ID: {order_id})\n"
+            response += f"Status: {result.status}\n"
+            if result.fill_price:
+                response += f"Fill Price: ${result.fill_price:,.2f}\n"
+            if result.fee:
+                response += f"Fee: ${result.fee:,.2f}\n"
+            if result.new_balance is not None:
+                response += f"New Balance: ${result.new_balance:,.2f}\n"
+            return response
+            
+        except Exception as e:
+            logger.error(f"confirm_and_execute error: {e}\n{traceback.format_exc()}")
+            try:
+                await orchestrator.transition(session_id, WorkflowState.FAILED)
+            except Exception:
+                pass
+            audit_logger.log_event("EXECUTION_ERROR", session_id, state.user_id, state.workflow_id, result={"error": str(e)})
+            return f"❌ Execution error: {str(e)}"
 
 trading_workflow = TradingWorkflowService()

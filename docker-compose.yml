@@ -64,6 +64,7 @@ services:
       - ./backend/.env
     environment:
       DATABASE_URL: mysql+pymysql://${MYSQL_USER}:${MYSQL_PASSWORD}@mysql:3306/${MYSQL_DATABASE}
+      REDIS_URL: redis://redis:6379/0
       WHISPER_EXE_PATH: /app/whisper.cpp/build/bin/whisper-cli
       WHISPER_MODEL_PATH: /app/whisper.cpp/models/ggml-base.en.bin
     ports:
@@ -71,9 +72,28 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      redis:
+        condition: service_started
     volumes:
       - ai_backend_data:/app/data
       - chroma_data:/app/chroma_db
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - crypto_network
+
+  # ─────────────────────────────────────────
+  # 3.1. Redis (Session & Workflow Store)
+  # ─────────────────────────────────────────
+  redis:
+    image: redis:alpine
+    container_name: crypto_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
     logging:
       driver: "json-file"
       options:
@@ -108,6 +128,7 @@ services:
   # 5. Chatbot UI (React/Vite)
   # ─────────────────────────────────────────
   chatbot-ui:
+    image: ritikajangra19/crypto-chatbot-ui:v1
     build:
       context: ./chatbot-ui
       dockerfile: Dockerfile
@@ -131,6 +152,7 @@ services:
   # 6. Admin UI (React/Vite)
   # ─────────────────────────────────────────
   admin-ui:
+    image: ritikajangra19/crypto-admin-ui:v1
     build:
       context: ./admin-ui
       dockerfile: Dockerfile
@@ -154,6 +176,7 @@ services:
   # 7. Exchange Frontend (React/Vite)
   # ─────────────────────────────────────────
   exchange-frontend:
+    image: ritikajangra19/crypto-exchange-frontend:v1
     build:
       context: ./cryptox/frontend
       dockerfile: Dockerfile

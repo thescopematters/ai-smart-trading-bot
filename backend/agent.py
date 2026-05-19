@@ -47,21 +47,12 @@ GEMINI_MODEL = "gemini-flash-latest"
 # -------------------------------------------------------------------------
 # MCP Connection Configuration
 # -------------------------------------------------------------------------
-# This tells the ADK where our MCP server lives and how to launch it.
-# The ADK will:
-#   1. Spawn "python mcp_server.py" as a child process
-#   2. Connect via STDIO pipes
-#   3. Perform the MCP handshake
-#   4. Auto-discover all @mcp.tool() decorated functions
-# -------------------------------------------------------------------------
-
-# Build the path to our MCP server scripts
 MCP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_servers")
 MCP_SERVER_PATH = os.path.join(MCP_DIR, "mcp_server.py")
 MCP_TRADING_SERVER_PATH = os.path.join(MCP_DIR, "mcp_trading_server.py")
 MCP_EXECUTION_SERVER_PATH = os.path.join(MCP_DIR, "mcp_execution_server.py")
 
-# Build the path to the Python executable inside our virtual environment
+# Python executable — same one running this process
 PYTHON_EXE = sys.executable
 
 logger.info(f"MCP Server Path: {MCP_SERVER_PATH}")
@@ -69,7 +60,7 @@ logger.info(f"MCP Trading Server Path: {MCP_TRADING_SERVER_PATH}")
 logger.info(f"MCP Execution Server Path: {MCP_EXECUTION_SERVER_PATH}")
 logger.info(f"Python Executable: {PYTHON_EXE}")
 
-# Create the MCP Toolsets
+# Create the MCP Toolsets — inherit full parent environment for Docker networking
 mcp_toolset = MCPToolset(
     connection_params=StdioConnectionParams(
         server_params=StdioServerParameters(
@@ -81,7 +72,6 @@ mcp_toolset = MCPToolset(
     )
 )
 
-# To instantly disable Paper Trading, simply comment out trading_toolset here and in the LlmAgent tools list.
 trading_toolset = MCPToolset(
     connection_params=StdioConnectionParams(
         server_params=StdioServerParameters(
@@ -105,7 +95,7 @@ execution_toolset = MCPToolset(
 )
 
 # -------------------------------------------------------------------------
-# Communication Guidelines (The 17 Strictures)
+# Communication Guidelines
 # -------------------------------------------------------------------------
 COMMUNICATION_GUIDELINES = """
 1. Keep responses concise and high-value. Default replies should be short unless the user asks for deep analysis.
@@ -125,7 +115,7 @@ COMMUNICATION_GUIDELINES = """
 15. **DO NOT USE TABLES** for single transactions or single price checks. Use clean **bold text** and bullet points instead.
 16. **STRICT TABLE RULES**: Every row (Header, Separator, Data) MUST be on a new line. Never put the separator `|---|` on the same line as the header. Use **"NA"** for missing values.
 17. Make responses visually clean. Important insights should stand out via **bold text**.
-18. **STRICT CONTEXT RULE**: You will see a `[SYSTEM CONTEXT: user_id=..., session_id=...]` tag in user messages. Use these IDs for all tool calls that require them. **DO NOT** mention these IDs or the context tag to the user.
+18. **STRICT CONTEXT RULE**: You will see a `[SYSTEM CONTEXT: user_id=..., session_id=...]` tag in user messages. Extract the user_id and session_id values and use them for all tool calls that require them. **DO NOT** mention these IDs or the context tag to the user.
 """
 
 # -------------------------------------------------------------------------
@@ -154,9 +144,18 @@ portfolio_agent = LlmAgent(
     description="Specialist in private user account data, balances, holdings, and P&L analytics.",
     instruction=f"""
     You are the Portfolio Agent. Your expertise is in the 'User's Private Account'.
-    - Use 'get_balance' to fetch current cash balances.
-    - Use 'get_holdings' to fetch current crypto positions/holdings.
-    - Use 'get_trade_history' to fetch the user's past trade history.
+    
+    TOOLS AVAILABLE:
+    - 'get_balance': Fetch current cash balance. Requires: user_id.
+    - 'get_holdings': Fetch current crypto positions/holdings. Requires: user_id.
+    - 'get_trade_history': Fetch the user's past trade history. Requires: user_id.
+    
+    CONTEXT EXTRACTION:
+    - The supervisor will include a `[SYSTEM CONTEXT: user_id=..., session_id=...]` tag in its message.
+    - Extract the `user_id` value and pass it as the `user_id` argument to ALL your tool calls.
+    - Example: If context says user_id=abc-123, call get_balance(user_id="abc-123").
+    
+    RULES:
     - Provide detailed P&L analytics for the user's paper trading account.
     - You MUST NOT execute any trades. Your role is purely informative.
     {COMMUNICATION_GUIDELINES}
@@ -178,7 +177,7 @@ risk_compliance_agent = LlmAgent(
     - You do not have direct tool access; evaluate the data provided by the supervisor.
     {COMMUNICATION_GUIDELINES}
     """,
-    tools=[], # Pure reasoning
+    tools=[],
 )
 
 # -------------------------------------------------------------------------
@@ -190,9 +189,28 @@ execution_agent = LlmAgent(
     description="Sole authority for trade execution and workflow management.",
     instruction=f"""
     You are the Execution Agent. You are the ONLY agent authorized to initiate and execute trades.
-    - Manage the trade workflow: initiate, provide order type/price, and confirm execution.
-    - Use 'initiate_trade_workflow', 'provide_order_type', 'provide_limit_price', and 'confirm_trade_execution'.
-    - Monitor live order status using 'get_live_order_status'.
+    
+    TOOLS AVAILABLE:
+    - 'initiate_trade_workflow': Start a new trade. Requires: symbol, quantity, side, session_id, user_id.
+    - 'provide_order_type': Set order type (MARKET or LIMIT). Requires: order_type, session_id.
+    - 'provide_limit_price': Set limit price. Requires: limit_price, session_id.
+    - 'confirm_trade_execution': Execute the trade after user confirms. Requires: session_id, user_id.
+    - 'get_live_order_status': Check order status. Requires: order_id.
+    
+    CONTEXT EXTRACTION (CRITICAL):
+    - The supervisor will include a `[SYSTEM CONTEXT: user_id=..., session_id=...]` tag.
+    - You MUST extract both `user_id` and `session_id` from this tag.
+    - Pass these exact values to every tool call that requires them.
+    - Example: If context says user_id=abc-123 and session_id=sess-456:
+      - Call initiate_trade_workflow(symbol="BTC", quantity=0.1, side="BUY", session_id="sess-456", user_id="abc-123")
+      - Call confirm_trade_execution(session_id="sess-456", user_id="abc-123")
+    
+    WORKFLOW:
+    1. When asked to buy/sell, call 'initiate_trade_workflow' with the extracted IDs.
+    2. When the user chooses order type, call 'provide_order_type'.
+    3. For limit orders, call 'provide_limit_price'.
+    4. When the user says "confirm", call 'confirm_trade_execution' with the extracted IDs.
+    
     {COMMUNICATION_GUIDELINES}
     """,
     tools=[execution_toolset],
@@ -211,23 +229,40 @@ crypto_agent = LlmAgent(
     DELEGATION & RESEARCH STRATEGY:
     1. **Research (RAG)**: If the user asks about project documentation, whitepapers, or internal knowledge, use the `query_knowledge_base` tool directly.
     2. **Delegation**: 
-       - For Market Data → Delegate to **market_analyst**.
-       - For Account/Portfolio Data → Delegate to **portfolio_agent**.
+       - For Market Data (prices, news, stats) → Delegate to **market_analyst**.
+       - For Account/Portfolio Data (balance, holdings, history) → Delegate to **portfolio_agent**.
        - For Risk Assessment → Delegate to **risk_compliance**.
-       - For Trade Execution → Delegate to **execution_agent**.
+       - For Trade Execution (buy, sell, confirm) → Delegate to **execution_agent**.
+    
+    3. **CRITICAL — Context Forwarding**: 
+       Every user message contains a `[SYSTEM CONTEXT: user_id=..., session_id=...]` tag.
+       When you delegate to ANY sub-agent, you MUST include this exact tag verbatim in your delegation message.
+       The sub-agents need these IDs to call their tools. Without them, tools will fail.
+       
+       Example delegation: "The user wants to buy 0.3 ETH. [SYSTEM CONTEXT: user_id=abc-123, session_id=sess-456]"
+    
+    TRADE EXECUTION PROTOCOL:
+    - Step 1: User requests a trade (e.g., "buy 0.1 BTC") → Delegate to execution_agent with context.
+    - Step 2: Execution agent returns risk analysis + asks for order type → Forward response to user.
+    - Step 3: User picks order type (e.g., "Market") → Delegate to execution_agent with context.
+    - Step 4: Execution agent asks for confirmation → Forward to user.
+    - Step 5: User says "confirm" → Delegate to execution_agent with context.
+    - Step 6: Execution agent returns result → Forward to user.
     
     COMMUNICATION:
     - Summarize sub-agent findings into a single cohesive briefing.
-    - Maintain the high-standard execution protocol: Collect (Symbol/Side/Qty) → Analyze (Price/Risk) → Order Type (Market/Limit) → WAIT for explicit "Confirm" → Execute.
+    - Do NOT add your own commentary between workflow steps — just forward the sub-agent's response.
+    - When the user says "confirm", immediately delegate to the execution_agent. Do not ask for re-confirmation.
     
     {COMMUNICATION_GUIDELINES}
     """,
     sub_agents=[market_analyst_agent, portfolio_agent, risk_compliance_agent, execution_agent],
-    tools=[mcp_toolset], # Supervisor only has RAG tools
+    tools=[mcp_toolset],
 )
 
 # Export for main.py
 root_agent = crypto_agent
+
 
 # if 2 Servers:
 # The Agent will automatically ask both servers what tools they have, 
