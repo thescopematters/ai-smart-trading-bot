@@ -130,28 +130,28 @@ const Login = () => {
     };
 
     return (
-        <div className="min-h-[calc(100vh-64px)] flex items-center justify-center p-4 bg-[#072042] relative overflow-hidden">
+        <div className="min-h-screen flex items-center justify-center p-4 bg-[#F5F6F8] relative overflow-hidden">
             {/* Background Decorations */}
-            <div className="absolute top-[-10%] right-[-5%] w-[400px] h-[400px] bg-indigo-600/20 rounded-full blur-[120px]" />
-            <div className="absolute bottom-[-10%] left-[-5%] w-[400px] h-[400px] bg-cyan-600/20 rounded-full blur-[120px]" />
+            <div className="absolute top-[-10%] right-[-5%] w-[400px] h-[400px] bg-indigo-600/5 rounded-full blur-[120px]" />
+            <div className="absolute bottom-[-10%] left-[-5%] w-[400px] h-[400px] bg-indigo-600/5 rounded-full blur-[120px]" />
 
             <div className="w-full max-w-md relative z-10">
-                <div className="bg-white/10 backdrop-blur-xl border border-white/20 rounded-3xl shadow-2xl p-8">
+                <div className="bg-white border border-[#ECEFF3] rounded-3xl shadow-[0_10px_30px_rgba(0,0,0,0.06)] p-8">
                     {/* Header */}
                     <div className="text-center mb-8">
-                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-600/20 text-indigo-400 mb-4 border border-indigo-500/30">
+                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 mb-4 border border-indigo-100">
                             {mode === 'login' ? <LogIn size={32} /> : <UserPlus size={32} />}
                         </div>
-                        <h1 className="text-3xl font-bold text-white mb-2">
+                        <h1 className="text-3xl font-bold text-[#111827] mb-2">
                             {mode === 'login' ? 'Welcome Back' : 'Create Account'}
                         </h1>
-                        <p className="text-slate-400">
+                        <p className="text-[#6B7280]">
                             Join the next generation of crypto intelligence
                         </p>
                     </div>
 
                     {error && (
-                        <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 p-3 rounded-xl text-sm mb-6 animate-shake">
+                        <div className="bg-rose-500/10 border border-rose-500/20 text-rose-600 p-3 rounded-xl text-sm mb-6 animate-shake text-center">
                             {error}
                         </div>
                     )}
@@ -159,7 +159,7 @@ const Login = () => {
                     <form onSubmit={handleSubmit} className="space-y-5">
                         {mode === 'register' && (
                             <div>
-                                <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">
+                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 ml-1">
                                     Full Name
                                 </label>
                                 <input
@@ -168,14 +168,14 @@ const Login = () => {
                                     value={formData.displayName}
                                     onChange={handleInputChange}
                                     placeholder="Enter your full name"
-                                    className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-base text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
+                                    className="w-full bg-white border border-[#E5E7EB] rounded-xl px-4 py-3 text-black placeholder:text-[#9CA3AF] focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/15 transition-all duration-200"
                                     required
                                 />
                             </div>
                         )}
 
                         <div>
-                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 ml-1">
                                 Email Address
                             </label>
                             <input
@@ -184,13 +184,13 @@ const Login = () => {
                                 value={formData.email}
                                 onChange={handleInputChange}
                                 placeholder="name@example.com"
-                                className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-base text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all"
+                                className="w-full bg-white border border-[#E5E7EB] rounded-xl px-4 py-3 text-black placeholder:text-[#9CA3AF] focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/15 transition-all duration-200"
                                 required
                             />
                         </div>
 
                         <div>
-                            <label className="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 ml-1">
+                            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 ml-1">
                                 Password
                             </label>
                             <div className="relative">
@@ -200,13 +200,13 @@ const Login = () => {
                                     value={formData.password}
                                     onChange={handleInputChange}
                                     placeholder="••••••••"
-                                    className="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-base text-white placeholder:text-slate-600 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all pr-12"
+                                    className="w-full bg-white border border-[#E5E7EB] rounded-xl px-4 py-3 text-black placeholder:text-[#9CA3AF] focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/15 transition-all duration-200 pr-12"
                                     required
                                 />
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-slate-500 hover:text-slate-300 transition-colors"
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-slate-400 hover:text-slate-600 transition-colors"
                                 >
                                     {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                                 </button>
@@ -216,7 +216,7 @@ const Login = () => {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl shadow-lg shadow-indigo-600/30 transition-all flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl shadow-[0_4px_12px_rgba(99,102,241,0.25)] hover:translate-y-[-1px] transition-all duration-200 flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
                         >
                             {loading ? <Loader2 className="animate-spin" /> : mode === 'login' ? 'Sign In' : 'Create Account'}
                             {!loading && <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />}
@@ -225,21 +225,21 @@ const Login = () => {
 
                     <div className="mt-6 text-center">
                         {mode === 'login' ? (
-                            <p className="text-slate-400 text-sm">
+                            <p className="text-[#6B7280] text-sm">
                                 Don't have an account?{' '}
                                 <button
                                     onClick={() => setMode('register')}
-                                    className="text-indigo-400 hover:text-indigo-300 font-bold hover:underline"
+                                    className="text-indigo-600 hover:text-indigo-500 font-bold hover:underline"
                                 >
                                     Sign Up
                                 </button>
                             </p>
                         ) : (
-                            <p className="text-slate-400 text-sm">
+                            <p className="text-[#6B7280] text-sm">
                                 Already have an account?{' '}
                                 <button
                                     onClick={() => setMode('login')}
-                                    className="text-indigo-400 hover:text-indigo-300 font-bold hover:underline"
+                                    className="text-indigo-600 hover:text-indigo-500 font-bold hover:underline"
                                 >
                                     Sign In
                                 </button>
@@ -247,18 +247,9 @@ const Login = () => {
                         )}
                     </div>
 
-                    <div className="mt-8 pt-8 border-t border-white/10 flex flex-col gap-4">
-                        <button
-                            onClick={handleGuestLogin}
-                            disabled={loading}
-                            className="w-full bg-white/5 hover:bg-white/10 text-white font-semibold py-3 rounded-xl transition-all flex items-center justify-center gap-2 border border-white/5"
-                        >
-                            <UserCircle size={20} className="text-cyan-400" />
-                            Continue as Guest
-                        </button>
-
-                        <p className="text-center text-xs text-slate-500">
-                            By continuing, you agree to our <span className="text-slate-300 hover:underline cursor-pointer">Terms of Service</span>
+                    <div className="mt-8 pt-6 border-t border-[#E5E7EB]">
+                        <p className="text-center text-xs text-[#9CA3AF]">
+                            By continuing, you agree to our <span className="text-indigo-600 hover:underline cursor-pointer">Terms of Service</span>
                         </p>
                     </div>
                 </div>
