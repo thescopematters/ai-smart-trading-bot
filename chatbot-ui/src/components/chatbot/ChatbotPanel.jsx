@@ -234,7 +234,7 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
 
     const events = ["mousedown", "mousemove", "keydown", "scroll", "touchstart"];
     events.forEach((name) => window.addEventListener(name, handleInteraction, { passive: true }));
-    
+
     return () => {
       events.forEach((name) => window.removeEventListener(name, handleInteraction));
     };
@@ -502,11 +502,10 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
                                         : session.id,
                                     );
                                   }}
-                                  className={`p-1 rounded-full transition-all ${
-                                    menuOpenId === session.id
+                                  className={`p-1 rounded-full transition-all ${menuOpenId === session.id
                                       ? "opacity-100 bg-slate-200 text-slate-600"
                                       : "hover:bg-slate-200 text-slate-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
-                                  }`}
+                                    }`}
                                 >
                                   <MoreVertical size={14} />
                                 </button>

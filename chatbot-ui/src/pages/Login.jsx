@@ -7,34 +7,16 @@ import clsx from 'clsx';
 import { api } from '../services/api';
 
 const Login = () => {
-    // Initial mode from localStorage or default to 'login'
-    const [mode, setMode] = useState(localStorage.getItem('current_auth_mode') || 'login'); 
     const [loading, setLoading] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [formData, setFormData] = useState({
         email: '',
-        username: '',
-        password: '',
-        displayName: ''
+        password: ''
     });
 
     const { login } = useAuth();
     const navigate = useNavigate();
-
-    // Persist mode changes to localStorage
-    React.useEffect(() => {
-        localStorage.setItem('current_auth_mode', mode);
-    }, [mode]);
-
-    // Check for mode requested from Navbar (override refresh persistence if needed)
-    React.useEffect(() => {
-        const requestedMode = localStorage.getItem('login_mode');
-        if (requestedMode) {
-            setMode(requestedMode);
-            localStorage.removeItem('login_mode');
-        }
-    }, []);
 
     const handleInputChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -42,25 +24,15 @@ const Login = () => {
     };
 
     const validateForm = () => {
-        // Email validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(formData.email)) {
             setError('Please enter a valid email address.');
             return false;
         }
 
-        // Password validation
         if (formData.password.length < 6) {
             setError('Password must be at least 6 characters long.');
             return false;
-        }
-
-        // Sign Up specific validations
-        if (mode === 'register') {
-            if (!formData.displayName.trim()) {
-                setError('Please enter your full name.');
-                return false;
-            }
         }
 
         return true;
@@ -75,7 +47,6 @@ const Login = () => {
         setLoading(true);
         // Get the current guest session ID from ephemeral storage
         const guestSessionId = sessionStorage.getItem('guest_last_session');
-        const endpoint = mode === 'login' ? 'login' : 'register';
         
         const body = {
             email: formData.email,
@@ -83,15 +54,8 @@ const Login = () => {
             client_id: guestSessionId
         };
 
-        if (mode === 'register') {
-            // Backend requires a username, so we'll derive it from the email
-            body.username = formData.email.split('@')[0];
-            body.display_name = formData.displayName;
-        }
-
         try {
-            const response = await api.post(`/api/auth/${endpoint}`, body);
-
+            const response = await api.post('/api/auth/login', body);
             const data = await response.json();
 
             if (response.ok) {
@@ -112,23 +76,6 @@ const Login = () => {
         }
     };
 
-    const handleGuestLogin = async () => {
-        setLoading(true);
-        try {
-            const response = await api.post('/api/auth/guest', {});
-            const data = await response.json();
-            if (response.ok) {
-                login(data.access_token, data.user);
-                // Guests always go to home/chat
-                navigate('/');
-            }
-        } catch (err) {
-            setError('Guest login failed');
-        } finally {
-            setLoading(false);
-        }
-    };
-
     return (
         <div className="min-h-screen flex items-center justify-center p-4 bg-[#F5F6F8] relative overflow-hidden">
             {/* Background Decorations */}
@@ -140,10 +87,10 @@ const Login = () => {
                     {/* Header */}
                     <div className="text-center mb-8">
                         <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-indigo-50 text-indigo-600 mb-4 border border-indigo-100">
-                            {mode === 'login' ? <LogIn size={32} /> : <UserPlus size={32} />}
+                            <LogIn size={32} />
                         </div>
                         <h1 className="text-3xl font-bold text-[#111827] mb-2">
-                            {mode === 'login' ? 'Welcome Back' : 'Create Account'}
+                            Welcome Back
                         </h1>
                         <p className="text-[#6B7280]">
                             Join the next generation of crypto intelligence
@@ -157,23 +104,6 @@ const Login = () => {
                     )}
 
                     <form onSubmit={handleSubmit} className="space-y-5">
-                        {mode === 'register' && (
-                            <div>
-                                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 ml-1">
-                                    Full Name
-                                </label>
-                                <input
-                                    type="text"
-                                    name="displayName"
-                                    value={formData.displayName}
-                                    onChange={handleInputChange}
-                                    placeholder="Enter your full name"
-                                    className="w-full bg-white border border-[#E5E7EB] rounded-xl px-4 py-3 text-black placeholder:text-[#9CA3AF] focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/15 transition-all duration-200"
-                                    required
-                                />
-                            </div>
-                        )}
-
                         <div>
                             <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-2 ml-1">
                                 Email Address
@@ -218,34 +148,10 @@ const Login = () => {
                             disabled={loading}
                             className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl shadow-[0_4px_12px_rgba(99,102,241,0.25)] hover:translate-y-[-1px] transition-all duration-200 flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
                         >
-                            {loading ? <Loader2 className="animate-spin" /> : mode === 'login' ? 'Sign In' : 'Create Account'}
+                            {loading ? <Loader2 className="animate-spin" /> : 'Sign In'}
                             {!loading && <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />}
                         </button>
                     </form>
-
-                    <div className="mt-6 text-center">
-                        {mode === 'login' ? (
-                            <p className="text-[#6B7280] text-sm">
-                                Don't have an account?{' '}
-                                <button
-                                    onClick={() => setMode('register')}
-                                    className="text-indigo-600 hover:text-indigo-500 font-bold hover:underline"
-                                >
-                                    Sign Up
-                                </button>
-                            </p>
-                        ) : (
-                            <p className="text-[#6B7280] text-sm">
-                                Already have an account?{' '}
-                                <button
-                                    onClick={() => setMode('login')}
-                                    className="text-indigo-600 hover:text-indigo-500 font-bold hover:underline"
-                                >
-                                    Sign In
-                                </button>
-                            </p>
-                        )}
-                    </div>
 
                     <div className="mt-8 pt-6 border-t border-[#E5E7EB]">
                         <p className="text-center text-xs text-[#9CA3AF]">

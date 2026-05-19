@@ -246,30 +246,39 @@ def register(request: Request, data: RegisterRequest, db: Session = Depends(get_
 @app.post("/api/auth/login")
 @limiter.limit("10/minute")
 def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
-    # Check for Admin Credentials from .env as fallback
-    admin_email = os.getenv("ADMIN_EMAIL")
-    admin_password = os.getenv("ADMIN_PASSWORD")
+    demo_email = os.getenv("DEMO_EMAIL")
+    demo_password = os.getenv("DEMO_PASSWORD")
     
-    user = db.query(User).filter(User.email == data.email).first()
-    if not user:
-        # Fallback to username
-        user = db.query(User).filter(User.username == data.email).first()
-
-    # If it matches the ENV admin credentials, we can manually authenticate
-    if not user and data.email == admin_email and data.password == admin_password:
-        # Check if admin exists in DB, if not, create a temporary session user
-        # Note: In a real app, you'd ensure the admin is in the DB, but for now we fallback.
-        access_token = create_access_token(data={"sub": admin_email})
-        return {
-            "access_token": access_token, 
-            "token_type": "bearer", 
-            "user": {"id": 999, "email": admin_email, "username": "admin", "role": "admin"}
-        }
+    if not demo_email or not demo_password:
+        raise HTTPException(status_code=500, detail="Authentication system is not configured.")
         
-    if not user or not user.password_hash or not verify_password(data.password, user.password_hash):
+    if data.email != demo_email:
+        raise HTTPException(status_code=401, detail="Invalid email or password")
+        
+    if data.password != demo_password:
         raise HTTPException(status_code=401, detail="Incorrect email or password")
-    
-    access_token = create_access_token(data={"sub": user.email or user.username})
+        
+    # Ensure demo user exists in DB
+    user = db.query(User).filter(User.email == demo_email).first()
+    if not user:
+        user = User(
+            email=demo_email,
+            username=demo_email.split('@')[0],
+            password_hash=get_password_hash(demo_password),
+            display_name="Demo User",
+            is_guest=False
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        
+        # Initialize paper wallet
+        wallet = PaperWallet(user_id=user.id, balance=10000.0)
+        db.add(wallet)
+        db.commit()
+        db.refresh(user)
+        
+    access_token = create_access_token(data={"sub": user.email})
     return {"access_token": access_token, "token_type": "bearer", "user": {"id": user.id, "email": user.email, "username": user.username, "role": "user"}}
 
 @app.post("/api/auth/guest")
@@ -1099,7 +1108,7 @@ def admin_login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = 
     master_username = os.getenv("ADMIN_USERNAME")
     master_password = os.getenv("ADMIN_PASSWORD")
     
-    if form_data.username == master_username and form_data.password == master_password:
+    if master_username and master_password and form_data.username == master_username and form_data.password == master_password:
         access_token = create_access_token(data={"sub": master_username, "is_admin": True})
         return {"access_token": access_token, "token_type": "bearer"}
 
