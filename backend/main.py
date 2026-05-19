@@ -361,6 +361,7 @@ async def transcribe_with_whisper(webm_bytes: bytes) -> str:
             WHISPER_EXE,
             "-m", WHISPER_MODEL,
             "-f", temp_wav,
+            "-ng",               # Force CPU-only mode to prevent GPU init failures
             "--no-timestamps",   # Clean output without timestamps
             "-l", "en",          # Enforce English
             "--threads", "4",    # Use 4 threads for speed
