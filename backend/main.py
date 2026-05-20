@@ -42,6 +42,7 @@ except ImportError:
 # Import DB and Auth
 from database import get_db, SessionLocal, User, AdminUser, ChatSession, ChatMessage, DefaultQuestion, Document, PaperWallet
 from auth import get_password_hash, verify_password, create_access_token, get_current_user, get_current_admin, limiter
+from utils.s3_service import s3_service
 
 # Import Gemini error types for smart retry logic
 try:
@@ -59,26 +60,61 @@ logging.basicConfig(
 logger = logging.getLogger("CryptoBackend")
 
 from database import engine, Base
+from sqlalchemy import text
 logger.info("Initializing database tables...")
 Base.metadata.create_all(bind=engine)
 
+# Safe database migration for S3 columns
+try:
+    with engine.connect() as conn:
+        for column_name, column_type in [("s3_url", "TEXT"), ("s3_key", "VARCHAR(500)")]:
+            try:
+                conn.execute(text(f"ALTER TABLE crypto_rag_documents ADD COLUMN {column_name} {column_type} NULL"))
+                logger.info(f"Database migration: Added column '{column_name}' to table 'crypto_rag_documents'.")
+            except Exception as e:
+                # Swallowing duplicate column error
+                if "Duplicate column name" not in str(e) and "already exists" not in str(e):
+                    logger.warning(f"Database migration info: {e}")
+except Exception as e:
+    logger.error(f"Failed to perform database migration for S3 columns: {e}")
+
 def sync_rag_documents(db: Session):
-    """Scans ./data folder and syncs with MySQL crypto_rag_documents table."""
+    """Scans ./data folder and syncs with MySQL crypto_rag_documents table, cleaning up orphaned database/vector entries."""
     data_folder = "./data"
     if not os.path.exists(data_folder):
         os.makedirs(data_folder, exist_ok=True)
-        return
 
     # Valid extensions
     valid_exts = ('.pdf', '.txt', '.md', '.docx')
-    files = [f for f in os.listdir(data_folder) if f.lower().endswith(valid_exts)]
+    local_files = set()
+    if os.path.exists(data_folder):
+        local_files = {f for f in os.listdir(data_folder) if f.lower().endswith(valid_exts)}
     
-    # Get existing filenames from DB
-    existing_docs = db.query(Document.file_name).all()
-    existing_filenames = {d[0] for d in existing_docs}
+    # 1. Clean up db records missing both local file and s3_key
+    all_docs = db.query(Document).all()
+    deleted_count = 0
+    for doc in all_docs:
+        local_exists = doc.file_name in local_files
+        s3_exists = doc.s3_key is not None and doc.s3_key != ""
+        
+        if not local_exists and not s3_exists:
+            logger.info(f"Sync: Removing orphaned document '{doc.file_name}' (missing from local and S3)")
+            # Try to delete from ChromaDB
+            try:
+                rag_service.delete_document(doc.file_name)
+            except Exception as ce:
+                logger.warning(f"Sync: Failed to delete vectors for {doc.file_name}: {ce}")
+            
+            db.delete(doc)
+            deleted_count += 1
 
-    synced_count = 0
-    for filename in files:
+    if deleted_count > 0:
+        db.commit()
+
+    # 2. Add local files that are not tracked in DB
+    existing_filenames = {d.file_name for d in db.query(Document).all()}
+    added_count = 0
+    for filename in local_files:
         if filename not in existing_filenames:
             new_doc = Document(
                 file_name=filename,
@@ -86,12 +122,13 @@ def sync_rag_documents(db: Session):
                 status="processed"
             )
             db.add(new_doc)
-            synced_count += 1
-            logger.info(f"Sync: Added {filename} to RAG Knowledge tracking (Source: system)")
+            added_count += 1
+            logger.info(f"Sync: Added local file '{filename}' to RAG Knowledge tracking")
     
-    if synced_count > 0:
+    if added_count > 0:
         db.commit()
-    return synced_count
+
+    return added_count - deleted_count
 
 try:
     load_dotenv()
@@ -1205,31 +1242,65 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
     import shutil
     import os
     
+    file_path = f"./data/{file.filename}"
+    s3_uploaded = False
+    s3_info = {}
+    
     try:
         os.makedirs("./data", exist_ok=True)
-        file_path = f"./data/{file.filename}"
         
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
             
-        logger.info(f"Admin: Uploading document {file.filename}...")
+        logger.info(f"Admin: Uploading document {file.filename} to S3...")
+        
+        # Upload to S3 (Raises exception on failure)
+        try:
+            s3_info = s3_service.upload_file_to_s3(file_path, file.filename)
+            s3_uploaded = True
+        except Exception as s3_err:
+            logger.error(f"S3 Upload failed for {file.filename}: {s3_err}")
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            raise HTTPException(status_code=500, detail=f"S3 Upload failed: {str(s3_err)}")
         
         # Trigger single-file RAG processing (Optimized)
+        logger.info(f"Admin: Ingesting document {file.filename} into RAG/ChromaDB...")
         rag_service.ingest_file(file_path)
         
         # Save metadata to DB
         doc = Document(
             file_name=file.filename,
             source="upload",
-            status="processed"
+            status="processed",
+            s3_url=s3_info.get("s3_url"),
+            s3_key=s3_info.get("s3_key")
         )
         db.add(doc)
         db.commit()
         logger.info(f"Admin: Document {file.filename} indexed and tracked successfully.")
-        return {"message": "Document uploaded and processed successfully"}
+        return {
+            "message": "Document uploaded and processed successfully",
+            "s3_url": s3_info.get("s3_url"),
+            "s3_key": s3_info.get("s3_key")
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Upload failed: {e}", exc_info=True)
         db.rollback()
+        # Cleanup S3 if uploaded
+        if s3_uploaded and s3_info.get("s3_key"):
+            try:
+                s3_service.delete_file_from_s3(s3_info["s3_key"])
+            except Exception as s3_del_err:
+                logger.error(f"Failed to cleanup S3 object on rollback: {s3_del_err}")
+        # Cleanup local file
+        if os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception as file_del_err:
+                logger.error(f"Failed to cleanup local file on rollback: {file_del_err}")
         raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @app.get("/api/admin/documents")
@@ -1244,6 +1315,8 @@ def get_admin_documents(db: Session = Depends(get_db), current_admin: AdminUser 
             "file_name": d.file_name,
             "source": d.source,
             "status": d.status,
+            "s3_url": d.s3_url,
+            "s3_key": d.s3_key,
             "created_at": d.created_at.replace(tzinfo=timezone.utc).isoformat() if d.created_at else None
         } for d in docs
     ]
@@ -1255,7 +1328,10 @@ def delete_admin_document(doc_id: int, db: Session = Depends(get_db), current_ad
         raise HTTPException(status_code=404, detail="Document not found")
     
     # 1. Delete from ChromaDB
-    rag_service.delete_document(doc.file_name)
+    try:
+        rag_service.delete_document(doc.file_name)
+    except Exception as ce:
+        logger.error(f"Failed to delete embeddings for {doc.file_name}: {ce}")
     
     # 2. Delete from Filesystem
     file_path = f"./data/{doc.file_name}"
@@ -1265,11 +1341,36 @@ def delete_admin_document(doc_id: int, db: Session = Depends(get_db), current_ad
         except Exception as e:
             logger.error(f"Failed to delete file {file_path}: {e}")
     
-    # 3. Delete from DB
+    # 3. Delete from S3
+    if doc.s3_key:
+        try:
+            s3_service.delete_file_from_s3(doc.s3_key)
+        except Exception as s3_err:
+            logger.error(f"Failed to delete S3 object {doc.s3_key}: {s3_err}")
+            
+    # 4. Delete from DB
     db.delete(doc)
     db.commit()
     
     return {"message": "Document deleted successfully"}
+
+@app.get("/api/admin/documents/{doc_id}/presigned-url")
+def get_document_presigned_url(doc_id: int, db: Session = Depends(get_db), current_admin: AdminUser = Depends(get_current_admin)):
+    doc = db.query(Document).filter(Document.id == doc_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+        
+    if not doc.s3_key:
+        raise HTTPException(status_code=400, detail="Document does not have an S3 key associated with it.")
+        
+    try:
+        presigned_url = s3_service.generate_presigned_url(doc.s3_key)
+        if not presigned_url:
+            raise HTTPException(status_code=500, detail="Failed to generate pre-signed URL.")
+        return {"url": presigned_url}
+    except Exception as e:
+        logger.error(f"Pre-signed URL generation failed for doc ID {doc_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Pre-signed URL generation failed: {str(e)}")
 
 
 # Admin Questions Management

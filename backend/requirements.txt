@@ -16,3 +16,4 @@ python-jose[cryptography]
 slowapi
 redis
 fastmcp
+boto3

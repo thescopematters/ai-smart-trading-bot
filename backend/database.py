@@ -128,6 +128,8 @@ class Document(Base):
     file_name = Column(String(255), nullable=False)
     source = Column(Enum(DocumentSource), default=DocumentSource.UPLOAD)
     status = Column(Enum(DocumentStatus), default=DocumentStatus.PROCESSED)
+    s3_url = Column(Text, nullable=True)
+    s3_key = Column(String(500), nullable=True)
     created_at = Column(DateTime, server_default=func.now())
 
 class DefaultQuestion(Base):

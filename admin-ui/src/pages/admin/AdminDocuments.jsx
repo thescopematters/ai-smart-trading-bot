@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Upload, FileText, Loader2, Trash2, RefreshCw, Database, Server } from 'lucide-react';
+import { Upload, FileText, Loader2, Trash2, RefreshCw, Database, Server, ExternalLink } from 'lucide-react';
 import { useAdminAuth } from '../../context/AdminAuthContext';
 import { useToast } from '../../context/ToastContext';
 import ConfirmModal from '../../ui/ConfirmModal';
@@ -74,6 +74,26 @@ const AdminDocuments = () => {
             }
         } catch (error) {
             console.error("Delete error", error);
+        }
+    };
+
+    const handleViewFile = async (docId) => {
+        try {
+            const res = await api.get(`/api/admin/documents/${docId}/presigned-url`, token);
+            if (res.ok) {
+                const data = await res.json();
+                if (data.url) {
+                    window.open(data.url, '_blank', 'noopener,noreferrer');
+                } else {
+                    toast({ type: 'error', message: 'Failed to retrieve document secure URL.' });
+                }
+            } else {
+                const errData = await res.json().catch(() => ({}));
+                toast({ type: 'error', message: errData.detail || 'Failed to generate secure view link.' });
+            }
+        } catch (error) {
+            console.error("View file error", error);
+            toast({ type: 'error', message: 'Failed to fetch secure link.' });
         }
     };
 
@@ -170,13 +190,24 @@ const AdminDocuments = () => {
                                             {new Date(doc.created_at).toLocaleDateString()}
                                         </td>
                                         <td className="p-4 text-right">
-                                            <button 
-                                                onClick={() => setModalState({ isOpen: true, docId: doc.id })}
-                                                className="p-2 text-text-muted hover:text-red-600 transition-colors"
-                                                title="Delete document"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
+                                            <div className="flex items-center justify-end gap-2">
+                                                {doc.s3_key && (
+                                                    <button 
+                                                        onClick={() => handleViewFile(doc.id)}
+                                                        className="p-2 text-text-muted hover:text-primary-purple transition-colors"
+                                                        title="View / Download Document"
+                                                    >
+                                                        <ExternalLink size={18} />
+                                                    </button>
+                                                )}
+                                                <button 
+                                                    onClick={() => setModalState({ isOpen: true, docId: doc.id })}
+                                                    className="p-2 text-text-muted hover:text-red-600 transition-colors"
+                                                    title="Delete document"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 ))}
