@@ -204,7 +204,7 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
   }, [activeSessionId, isGuest, userPrefix]);
 
   // ── WebSocket ───────────────────────────────────────────────────────────
-  const API_BASE = import.meta.env.VITE_API_URL || "/api";
+  const API_BASE = import.meta.env.VITE_API_URL || "";
   const WS_BASE = API_BASE.replace(/^http/, "ws");
   const wsUrl = `${WS_BASE}/ws/chat`;
 

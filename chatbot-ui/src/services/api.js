@@ -1,4 +1,4 @@
-const BASE_URL = import.meta.env.VITE_API_URL || '/api';
+const BASE_URL = import.meta.env.VITE_API_URL || '';
 
 const headers = (token, isJson = true) => ({
   ...(isJson && { 'Content-Type': 'application/json' }),
