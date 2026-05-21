@@ -74,8 +74,17 @@ export const useChatWebSocket = (url, sessionId, userPrefix = 'guest', isActive 
         const cleanBase = baseWithPath.replace(/\/user-session-1$/, '').replace(/\/$/, '');
         const wsUrl = queryString ? `${cleanBase}/${sessionId}?${queryString}` : `${cleanBase}/${sessionId}`;
 
-        console.log('[WS] Connecting to:', wsUrl);
-        const socket = new WebSocket(wsUrl);
+        let absoluteWsUrl = wsUrl;
+        if (!absoluteWsUrl.startsWith('ws://') && !absoluteWsUrl.startsWith('wss://')) {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const host = window.location.host;
+            // Make sure absoluteWsUrl starts with a slash if it doesn't already
+            const path = absoluteWsUrl.startsWith('/') ? absoluteWsUrl : `/${absoluteWsUrl}`;
+            absoluteWsUrl = `${protocol}//${host}${path}`;
+        }
+
+        console.log('[WS] Connecting to:', absoluteWsUrl);
+        const socket = new WebSocket(absoluteWsUrl);
         socketRef.current = socket;
 
         socket.onopen = () => {

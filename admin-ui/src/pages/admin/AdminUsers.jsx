@@ -1,12 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { useAdminAuth } from '../../context/AdminAuthContext';
-import { Users, Mail, User as UserIcon, Shield, Search, RefreshCcw, MoreHorizontal } from 'lucide-react';
+import { useToast } from '../../context/ToastContext';
+import { Users, Mail, User as UserIcon, Shield, Search, RefreshCcw, Trash2, Loader2 } from 'lucide-react';
 import { api } from '../../services/api';
+import ConfirmModal from '../../ui/ConfirmModal';
 
 const AdminUsers = () => {
+    const toast = useToast();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [deletingId, setDeletingId] = useState(null);
     const [searchQuery, setSearchQuery] = useState('');
+    const [modalState, setModalState] = useState({ isOpen: false, userId: null });
     const { token } = useAdminAuth();
 
     const fetchUsers = async () => {
@@ -22,6 +27,26 @@ const AdminUsers = () => {
             console.error("Failed to fetch users:", error);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDeleteUser = async () => {
+        const userId = modalState.userId;
+        setModalState({ isOpen: false, userId: null });
+        setDeletingId(userId);
+        try {
+            const response = await api.delete(`/api/admin/users/${userId}`, token);
+            if (response.ok) {
+                toast({ type: 'success', message: 'User account and associated data deleted successfully.' });
+                fetchUsers();
+            } else {
+                toast({ type: 'error', message: 'Failed to delete user account.' });
+            }
+        } catch (error) {
+            console.error("Failed to delete user:", error);
+            toast({ type: 'error', message: 'Error deleting user account.' });
+        } finally {
+            setDeletingId(null);
         }
     };
 
@@ -77,7 +102,6 @@ const AdminUsers = () => {
                                 <th className="px-6 py-4 text-xs font-bold text-text-muted uppercase tracking-widest">User Info</th>
                                 <th className="px-6 py-4 text-xs font-bold text-text-muted uppercase tracking-widest">Username</th>
                                 <th className="px-6 py-4 text-xs font-bold text-text-muted uppercase tracking-widest">Role</th>
-                                <th className="px-6 py-4 text-xs font-bold text-text-muted uppercase tracking-widest">Status</th>
                                 <th className="px-6 py-4 text-xs font-bold text-text-muted uppercase tracking-widest text-right">Actions</th>
                             </tr>
                         </thead>
@@ -88,13 +112,12 @@ const AdminUsers = () => {
                                         <td className="px-6 py-4"><div className="h-10 w-40 bg-sidebar-active/50 rounded-lg" /></td>
                                         <td className="px-6 py-4"><div className="h-5 w-24 bg-sidebar-active/50 rounded-lg" /></td>
                                         <td className="px-6 py-4"><div className="h-6 w-16 bg-sidebar-active/50 rounded-full" /></td>
-                                        <td className="px-6 py-4"><div className="h-6 w-20 bg-sidebar-active/50 rounded-full" /></td>
                                         <td className="px-6 py-4"><div className="h-8 w-8 bg-sidebar-active/50 rounded-lg ml-auto" /></td>
                                     </tr>
                                 ))
                             ) : filteredUsers.length === 0 ? (
                                 <tr>
-                                    <td colSpan="5" className="px-6 py-20 text-center text-slate-500 font-medium">
+                                    <td colSpan="4" className="px-6 py-20 text-center text-slate-500 font-medium">
                                         No users found matching your search.
                                     </td>
                                 </tr>
@@ -128,18 +151,14 @@ const AdminUsers = () => {
                                                 {user.role}
                                             </span>
                                         </td>
-                                        <td className="px-6 py-4">
-                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
-                                                user.is_guest 
-                                                ? 'bg-amber-500 text-white shadow-sm' 
-                                                : 'bg-emerald-500 text-white shadow-sm'
-                                            }`}>
-                                                {user.is_guest ? 'Guest' : 'Registered'}
-                                            </span>
-                                        </td>
                                         <td className="px-6 py-4 text-right">
-                                            <button className="p-2 text-text-muted hover:text-text-primary hover:bg-sidebar-active rounded-lg transition-all">
-                                                <MoreHorizontal size={18} />
+                                            <button 
+                                                onClick={() => setModalState({ isOpen: true, userId: user.id })}
+                                                disabled={deletingId === user.id}
+                                                className="p-2 text-text-muted hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition-all disabled:opacity-50"
+                                                title="Delete user account"
+                                            >
+                                                {deletingId === user.id ? <Loader2 size={18} className="animate-spin" /> : <Trash2 size={18} />}
                                             </button>
                                         </td>
                                     </tr>
@@ -149,6 +168,14 @@ const AdminUsers = () => {
                     </table>
                 </div>
             </div>
+
+            <ConfirmModal
+                isOpen={modalState.isOpen}
+                title="Delete User Account"
+                message="This will permanently delete this user account along with all their wallets, chat history, positions, and trades. This action cannot be undone."
+                onConfirm={handleDeleteUser}
+                onCancel={() => setModalState({ isOpen: false, userId: null })}
+            />
         </div>
     );
 };

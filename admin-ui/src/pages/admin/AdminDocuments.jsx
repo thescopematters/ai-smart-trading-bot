@@ -98,9 +98,9 @@ const AdminDocuments = () => {
     };
 
     return (
-        <div className="bg-card-bg border border-card-border rounded-3xl p-8 shadow-sm">
+        <div className="bg-card-bg border border-card-border rounded-3xl p-4 sm:p-8 shadow-sm">
             <div className="flex items-center justify-between mb-2">
-                <h2 className="text-xl font-bold text-text-primary">RAG Knowledge Base</h2>
+                <h2 className="text-lg sm:text-xl font-bold text-text-primary">Chatbot Knowledge Base</h2>
                 <button 
                     onClick={fetchDocuments}
                     className="p-2 text-text-muted hover:text-text-primary transition-colors"
@@ -109,9 +109,11 @@ const AdminDocuments = () => {
                     <RefreshCw size={20} className={loading ? "animate-spin" : ""} />
                 </button>
             </div>
-            <p className="text-text-secondary mb-8">Manage the documents that power the chatbot's domain knowledge.</p>
+            <p className="text-text-secondary text-xs sm:text-sm mb-6 sm:mb-8">
+                Upload reference documents to train your chatbot. The bot will use these files to answer questions.
+            </p>
 
-            <form onSubmit={handleUpload} className="mb-8 p-6 border-2 border-dashed border-border-light rounded-2xl bg-sidebar-active/30 flex flex-col items-center justify-center gap-4">
+            <form onSubmit={handleUpload} className="mb-6 sm:mb-8 p-4 sm:p-6 border-2 border-dashed border-border-light rounded-2xl bg-sidebar-active/30 flex flex-col items-center justify-center gap-3 sm:gap-4">
                 <input 
                     type="file" 
                     id="doc-upload" 
@@ -119,93 +121,96 @@ const AdminDocuments = () => {
                     accept=".pdf,.txt,.docx,.md"
                     onChange={(e) => setFile(e.target.files[0])}
                 />
-                <label htmlFor="doc-upload" className="cursor-pointer flex flex-col items-center gap-2">
-                    <div className="w-16 h-16 rounded-full bg-primary-purple/10 text-primary-purple flex items-center justify-center mb-2 hover:bg-primary-purple/20 transition-colors">
-                        <Upload size={28} />
+                <label htmlFor="doc-upload" className="cursor-pointer flex flex-col items-center gap-2 text-center w-full">
+                    <div className="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-primary-purple/10 text-primary-purple flex items-center justify-center mb-1 sm:mb-2 hover:bg-primary-purple/20 transition-colors">
+                        <Upload size={24} className="sm:hidden" />
+                        <Upload size={28} className="hidden sm:block" />
                     </div>
-                    <span className="text-text-primary font-medium">
-                        {file ? file.name : "Click to select a document"}
+                    <span className="text-text-primary font-medium text-sm sm:text-base px-2 truncate max-w-[280px] sm:max-w-full">
+                        {file ? file.name : "Click or drag to select a file"}
                     </span>
-                    <span className="text-text-muted text-sm">
-                        {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "Supports .pdf, .txt, .md"}
+                    <span className="text-text-muted text-xs sm:text-sm">
+                        {file ? `${(file.size / 1024 / 1024).toFixed(2)} MB` : "Supports PDF, TXT, MD"}
                     </span>
                 </label>
                 
                 <button 
                     type="submit" 
                     disabled={!file || uploading}
-                    className="mt-4 px-6 py-2 bg-text-primary hover:bg-text-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg font-medium transition-all flex items-center gap-2"
+                    className="mt-2 sm:mt-4 px-5 py-2 bg-text-primary hover:bg-text-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-sm sm:text-base font-medium transition-all flex items-center gap-2"
                 >
                     {uploading ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
-                    {uploading ? "Processing & Embedding..." : "Upload Document"}
+                    {uploading ? "Teaching Chatbot..." : "Upload & Teach Bot"}
                 </button>
             </form>
 
             <div>
-                <h3 className="text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
+                <h3 className="text-base sm:text-lg font-bold text-text-primary mb-4 flex items-center gap-2">
                     <Database size={20} className="text-primary-purple" />
-                    Indexed Knowledge
+                    Reference Documents
                 </h3>
                 {loading && documents.length === 0 ? (
                     <div className="flex justify-center p-8"><Loader2 className="animate-spin text-primary-purple" /></div>
                 ) : documents.length === 0 ? (
-                    <div className="text-center p-8 text-text-muted bg-sidebar-active/30 rounded-xl">No documents indexed yet.</div>
+                    <div className="text-center p-8 text-text-muted bg-sidebar-active/30 rounded-xl text-sm">No reference documents uploaded yet.</div>
                 ) : (
-                    <div className="overflow-hidden rounded-xl border border-border-light">
-                        <table className="w-full text-left border-collapse">
+                    <div className="overflow-x-auto rounded-xl border border-border-light custom-scrollbar">
+                        <table className="w-full text-left border-collapse min-w-[600px]">
                             <thead>
-                                <tr className="bg-sidebar-active/50 border-b border-border-light">
-                                    <th className="p-4 text-text-muted font-medium text-xs uppercase tracking-wider">Document Name</th>
-                                    <th className="p-4 text-text-muted font-medium text-xs uppercase tracking-wider">Source</th>
-                                    <th className="p-4 text-text-muted font-medium text-xs uppercase tracking-wider">Status</th>
-                                    <th className="p-4 text-text-muted font-medium text-xs uppercase tracking-wider">Indexed At</th>
-                                    <th className="p-4 text-text-muted font-medium text-xs uppercase tracking-wider text-right">Actions</th>
+                                <tr className="bg-sidebar-active/55 border-b border-border-light">
+                                    <th className="p-3 sm:p-4 text-text-muted font-medium text-[10px] sm:text-xs uppercase tracking-wider whitespace-nowrap">Document Name</th>
+                                    <th className="p-3 sm:p-4 text-text-muted font-medium text-[10px] sm:text-xs uppercase tracking-wider whitespace-nowrap">Source</th>
+                                    <th className="p-3 sm:p-4 text-text-muted font-medium text-[10px] sm:text-xs uppercase tracking-wider whitespace-nowrap">Status</th>
+                                    <th className="p-3 sm:p-4 text-text-muted font-medium text-[10px] sm:text-xs uppercase tracking-wider whitespace-nowrap">Uploaded On</th>
+                                    <th className="p-3 sm:p-4 text-text-muted font-medium text-[10px] sm:text-xs uppercase tracking-wider text-right whitespace-nowrap">Actions</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-border-light">
                                 {documents.map(doc => (
-                                    <tr key={doc.id} className="hover:bg-sidebar-active/30 transition-colors text-text-primary">
-                                        <td className="p-4">
+                                    <tr key={doc.id} className="hover:bg-sidebar-active/30 transition-colors text-text-primary text-xs sm:text-sm">
+                                        <td className="p-3 sm:p-4">
                                             <div className="flex items-center gap-3">
                                                 <FileText size={18} className="text-primary-purple shrink-0" />
-                                                <span className="truncate max-w-[200px]" title={doc.file_name}>{doc.file_name}</span>
+                                                <span className="truncate max-w-[150px] sm:max-w-[250px]" title={doc.file_name}>{doc.file_name}</span>
                                             </div>
                                         </td>
-                                        <td className="p-4">
-                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                        <td className="p-3 sm:p-4">
+                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${
                                                 doc.source === 'upload' ? 'bg-primary-purple text-white' : 'bg-amber-500 text-white'
                                             }`}>
                                                 {doc.source === 'upload' ? <Upload size={10} /> : <Server size={10} />}
                                                 {doc.source}
                                             </span>
                                         </td>
-                                        <td className="p-4">
-                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                                        <td className="p-3 sm:p-4">
+                                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 sm:px-3 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider ${
                                                 doc.status === 'processed' ? 'bg-emerald-500 text-white' : 'bg-gray-400 text-white'
                                             }`}>
                                                 {doc.status}
                                             </span>
                                         </td>
-                                        <td className="p-4 text-xs text-text-muted">
+                                        <td className="p-3 sm:p-4 text-[10px] sm:text-xs text-text-muted whitespace-nowrap">
                                             {new Date(doc.created_at).toLocaleDateString()}
                                         </td>
-                                        <td className="p-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
+                                        <td className="p-3 sm:p-4 text-right">
+                                            <div className="flex items-center justify-end gap-1.5 sm:gap-2">
                                                 {doc.s3_key && (
                                                     <button 
                                                         onClick={() => handleViewFile(doc.id)}
-                                                        className="p-2 text-text-muted hover:text-primary-purple transition-colors"
+                                                        className="p-1.5 sm:p-2 text-text-muted hover:text-primary-purple transition-colors"
                                                         title="View / Download Document"
                                                     >
-                                                        <ExternalLink size={18} />
+                                                        <ExternalLink size={16} className="sm:hidden" />
+                                                        <ExternalLink size={18} className="hidden sm:block" />
                                                     </button>
                                                 )}
                                                 <button 
                                                     onClick={() => setModalState({ isOpen: true, docId: doc.id })}
-                                                    className="p-2 text-text-muted hover:text-red-600 transition-colors"
+                                                    className="p-1.5 sm:p-2 text-text-muted hover:text-red-600 transition-colors"
                                                     title="Delete document"
                                                 >
-                                                    <Trash2 size={18} />
+                                                    <Trash2 size={16} className="sm:hidden" />
+                                                    <Trash2 size={18} className="hidden sm:block" />
                                                 </button>
                                             </div>
                                         </td>
@@ -220,7 +225,7 @@ const AdminDocuments = () => {
             <ConfirmModal
                 isOpen={modalState.isOpen}
                 title="Delete Document"
-                message="This will remove its knowledge from the chatbot and delete the file. This cannot be undone."
+                message="This will permanently delete this document. The chatbot will no longer use it to answer questions. This cannot be undone."
                 onConfirm={handleDelete}
                 onCancel={() => setModalState({ isOpen: false, docId: null })}
             />
