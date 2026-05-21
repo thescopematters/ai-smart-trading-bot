@@ -42,20 +42,20 @@ const markdownComponents = {
     );
   },
   table: ({ node, ...props }) => (
-    <div className="overflow-x-auto max-w-full my-4 rounded-xl border border-slate-200">
-      <table className="min-w-full divide-y divide-slate-200" {...props} />
+    <div className="w-full overflow-x-auto my-3 rounded-xl border border-slate-200 bg-white shadow-sm pb-1 custom-scrollbar">
+      <table className="w-max min-w-full divide-y divide-slate-200 text-left border-collapse" {...props} />
     </div>
   ),
-  thead: ({ node, ...props }) => <thead className="bg-slate-50" {...props} />,
+  thead: ({ node, ...props }) => <thead className="bg-slate-50/80" {...props} />,
   th: ({ node, ...props }) => (
     <th
-      className="px-4 py-2 text-left text-xs font-bold text-slate-600 uppercase tracking-wider"
+      className="px-3 py-2 sm:px-4 sm:py-3 text-left text-[10px] sm:text-xs font-extrabold text-slate-500 uppercase tracking-wider whitespace-nowrap"
       {...props}
     />
   ),
   td: ({ node, ...props }) => (
     <td
-      className="px-4 py-2 text-xs text-slate-700 whitespace-normal break-words border-t border-slate-100"
+      className="px-3 py-2 sm:px-4 sm:py-3 text-[11px] sm:text-sm text-slate-700 border-t border-slate-100/60 font-medium whitespace-nowrap"
       {...props}
     />
   ),
@@ -73,7 +73,7 @@ const remarkPluginsArray = [remarkGfm];
 const MessageRow = memo(({ msg }) => (
   <div
     className={clsx(
-      "flex w-full",
+      "flex w-full min-w-0",
       msg.isUser ? "justify-end" : "justify-start",
     )}
   >
@@ -89,13 +89,13 @@ const MessageRow = memo(({ msg }) => (
 
     <div
       className={clsx(
-        "flex flex-col max-w-[80%] min-w-0",
-        msg.isUser ? "items-end" : "items-start",
+        "flex flex-col min-w-0",
+        msg.isUser ? "items-end max-w-[80%]" : "items-start max-w-[95%] sm:max-w-[90%]",
       )}
     >
       <div
         className={clsx(
-          "rounded-2xl px-5 py-3 text-sm shadow-sm min-w-0 overflow-x-auto",
+          "rounded-2xl px-5 py-3 text-sm shadow-sm min-w-0 max-w-full",
           msg.isUser
             ? "bg-[#072042] text-white rounded-br-none shadow-[#072042]/20"
             : msg.isError
@@ -106,7 +106,7 @@ const MessageRow = memo(({ msg }) => (
         {msg.isUser ? (
           msg.text
         ) : (
-          <div className="prose prose-slate prose-sm max-w-none text-gray-900">
+          <div className="prose prose-slate prose-sm text-gray-900 min-w-0 max-w-full w-full">
             <ReactMarkdown
               remarkPlugins={remarkPluginsArray}
               components={markdownComponents}
@@ -192,11 +192,11 @@ const ChatMessages = ({ messages, isTyping }) => {
   }, []);
 
   return (
-    <div className="flex-1 relative overflow-hidden flex flex-col min-h-0">
+    <div className="flex-1 relative overflow-hidden flex flex-col min-h-0 w-full">
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar overscroll-contain"
+        className="flex-1 overflow-y-auto overflow-x-hidden w-full p-4 space-y-6 custom-scrollbar overscroll-contain"
       >
         {messages.map((msg) => (
           <MessageRow key={msg.id} msg={msg} />
