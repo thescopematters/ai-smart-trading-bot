@@ -28,32 +28,6 @@ services:
       - crypto_network
 
   # ─────────────────────────────────────────
-  # 2. PostgreSQL Database (Internal Only)
-  # ─────────────────────────────────────────
-  postgres:
-    image: postgres:15
-    container_name: crypto_postgres
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: cryptox_db
-      POSTGRES_USER: cryptox_user
-      POSTGRES_PASSWORD: cryptoxpass123
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U cryptox_user -d cryptox_db"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    networks:
-      - crypto_network
-
-  # ─────────────────────────────────────────
   # 3. AI Backend (FastAPI)
   # ─────────────────────────────────────────
   ai-backend:
@@ -94,28 +68,6 @@ services:
     restart: unless-stopped
     ports:
       - "6379:6379"
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    networks:
-      - crypto_network
-
-  # ─────────────────────────────────────────
-  # 4. Exchange Backend (NestJS)
-  # ─────────────────────────────────────────
-  exchange-backend:
-    image: ritikajangra19/crypto-exchange-backend:v1
-    container_name: crypto_exchange_backend
-    restart: unless-stopped
-    env_file:
-      - ./cryptox/backend/.env
-    ports:
-      - "3001:3001"
-    depends_on:
-      postgres:
-        condition: service_healthy
     logging:
       driver: "json-file"
       options:
@@ -173,30 +125,6 @@ services:
       - crypto_network
 
   # ─────────────────────────────────────────
-  # 7. Exchange Frontend (React/Vite)
-  # ─────────────────────────────────────────
-  exchange-frontend:
-    image: ritikajangra19/crypto-exchange-frontend:v1
-    build:
-      context: ./cryptox/frontend
-      dockerfile: Dockerfile
-      args:
-        VITE_API_URL: ${EXCHANGE_API_URL}
-    container_name: crypto_exchange_frontend
-    restart: unless-stopped
-    ports:
-      - "3003:80"
-    depends_on:
-      - exchange-backend
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-    networks:
-      - crypto_network
-
-  # ─────────────────────────────────────────
   # 8. Database Management (phpMyAdmin)
   # ─────────────────────────────────────────
   phpmyadmin:
@@ -225,7 +153,6 @@ volumes:
   mysql_data:
   ai_backend_data:
   chroma_data:
-  postgres_data:
 
 networks:
   crypto_network:

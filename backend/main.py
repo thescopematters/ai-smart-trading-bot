@@ -181,12 +181,8 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "http://localhost:3002",
-        "http://localhost:3003",
         "http://3.82.203.121:3000",
         "http://3.82.203.121:3002",
-        "http://3.82.203.121:3003",
-        "https://ai-smart-trading-bot-j6ry.vercel.app",
-        "https://ai-smart-trading-bot.vercel.app"
     ],
     allow_credentials=True,
     allow_methods=["*"],
