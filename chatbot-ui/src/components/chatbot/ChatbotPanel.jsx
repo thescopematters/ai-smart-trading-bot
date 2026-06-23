@@ -220,6 +220,18 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
   const [ttsEnabled, setTtsEnabled] = useState(
     () => localStorage.getItem("crypto_tts_enabled") === "true"
   );
+  const [voicesList, setVoicesList] = useState([]);
+
+  useEffect(() => {
+    const updateVoicesList = () => {
+      const allVoices = window.speechSynthesis.getVoices();
+      setVoicesList(allVoices);
+    };
+    updateVoicesList();
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = updateVoicesList;
+    }
+  }, []);
 
   const handleToggleTts = () => {
     const newVal = !ttsEnabled;
@@ -243,7 +255,62 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
           if (cleanText) {
             window.speechSynthesis.cancel(); // Stop any ongoing speech
             const utterance = new SpeechSynthesisUtterance(cleanText);
-            utterance.rate = 1.05;
+
+            // Find a high-quality female English voice
+            const voices = voicesList.length > 0 ? voicesList : window.speechSynthesis.getVoices();
+            console.log("SpeechSynthesis available voices count:", voices.length);
+            
+            let selectedVoice = null;
+            
+            if (voices.length > 0) {
+              // Whitelist of known female voice keywords
+              const femaleKeywords = ["zira", "aria", "natasha", "samantha", "hazel", "susan", "female", "karen", "moira", "tessa", "victoria", "veena", "heera", "sabina", "elsa", "hortense", "julie", "paulina"];
+              
+              // Blacklist of known male voice keywords
+              const maleKeywords = ["david", "mark", "george", "ravi", "male", "microsoft mobile", "richard", "james", "sean", "alex", "daniel", "tom", "oliver", "guy", "ryan", "benjamin", "connor", "william", "andrew", "ian"];
+
+              // 1. Filter the voice list to strictly female English voices
+              const femaleEnglishVoices = voices.filter(v => 
+                v.lang.toLowerCase().startsWith("en") &&
+                (femaleKeywords.some(kw => v.name.toLowerCase().includes(kw)) || 
+                 !maleKeywords.some(m => v.name.toLowerCase().includes(m)))
+              );
+
+              if (femaleEnglishVoices.length > 0) {
+                // 2. Out of the female voices, prioritize local offline voices (like Zira or Samantha) for instant playback
+                selectedVoice = femaleEnglishVoices.find(v => 
+                  !v.name.toLowerCase().includes("online") && 
+                  !v.name.toLowerCase().includes("natural") &&
+                  (v.name.toLowerCase().includes("zira") || v.name.toLowerCase().includes("samantha"))
+                );
+
+                // 3. Fallback: If those aren't found, pick the first available female English voice
+                if (!selectedVoice) {
+                  selectedVoice = femaleEnglishVoices[0];
+                }
+              }
+              
+              // 4. Absolute fallback if no female voice could be detected on the system
+              if (!selectedVoice) {
+                selectedVoice = voices.find(v => v.lang.toLowerCase().startsWith("en"));
+              }
+            }
+
+            console.log("Selected TTS Voice:", selectedVoice ? selectedVoice.name : "None (browser default)");
+
+            if (selectedVoice) {
+              utterance.voice = selectedVoice;
+            }
+
+            // Adjust parameters for a soft, smooth voice
+            const isNeural = selectedVoice && (
+              selectedVoice.name.toLowerCase().includes("natural") || 
+              selectedVoice.name.toLowerCase().includes("online") || 
+              selectedVoice.name.toLowerCase().includes("google")
+            );
+            
+            utterance.rate = isNeural ? 1.0 : 0.95;
+            utterance.pitch = 1.0; 
             window.speechSynthesis.speak(utterance);
           }
         }
