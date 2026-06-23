@@ -17,10 +17,13 @@ const ChatInput = ({
   const [message, setMessage] = useState("");
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [waveOffset, setWaveOffset] = useState(0);
+  const [audioVolumes, setAudioVolumes] = useState(new Array(30).fill(4));
   const textareaRef = useRef(null);
   const streamRef = useRef(null);
   const mediaRecorderRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const animationFrameRef = useRef(null);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -30,39 +33,93 @@ const ChatInput = ({
     }
   }, [message]);
 
+  const cleanupAudioAnalyser = () => {
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+      audioContextRef.current.close().catch(console.error);
+      audioContextRef.current = null;
+    }
+    analyserRef.current = null;
+    setAudioVolumes(new Array(30).fill(4));
+  };
+
   // Cleanup microphone on unmount
   useEffect(() => {
     return () => {
+      cleanupAudioAnalyser();
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
     };
   }, []);
 
-  // ... existing transcription useEffect ...
+  // Clean transcription and strip silence tokens
   useEffect(() => {
     if (currentTranscript !== undefined) {
       setIsProcessing(false);
     }
     if (currentTranscript && currentTranscript.trim()) {
-      setMessage(
-        (prev) => (prev.trim() ? prev + " " : "") + currentTranscript.trim(),
-      );
+      // Strip any transcription annotations wrapped in brackets or parentheses (e.g. [BLANK_AUDIO], [INAUDIBLE])
+      let cleaned = currentTranscript
+        .replace(/\[[^\]]*\]/g, "")
+        .replace(/\([^\)]*\)/g, "")
+        .trim();
+
+      if (cleaned) {
+        setMessage(
+          (prev) => (prev.trim() ? prev + " " : "") + cleaned,
+        );
+      }
     }
   }, [currentTranscript]);
-
-  useEffect(() => {
-    if (!isListening) return;
-    const interval = setInterval(() => {
-      setWaveOffset((prev) => prev + 1);
-    }, 200); // speed — lower = faster scroll
-    return () => clearInterval(interval);
-  }, [isListening]);
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
+
+      // Initialize Web Audio API Analyser for real-time responsiveness
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (AudioContextClass) {
+        const audioCtx = new AudioContextClass();
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 64; // 32 frequency bins
+        analyser.smoothingTimeConstant = 0.6; // smooth transition
+        const source = audioCtx.createMediaStreamSource(stream);
+        source.connect(analyser);
+
+        audioContextRef.current = audioCtx;
+        analyserRef.current = analyser;
+
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+        let lastUpdateTime = 0;
+        const updateWaveform = (timestamp) => {
+          if (!analyserRef.current) return;
+
+          // Update every 60ms to make the wave scroll forward smoothly
+          if (timestamp - lastUpdateTime >= 60) {
+            lastUpdateTime = timestamp;
+            analyserRef.current.getByteFrequencyData(dataArray);
+
+            // Calculate average volume focusing on low/mid frequencies (first 16 bins)
+            let sum = 0;
+            const binsToAverage = Math.min(dataArray.length, 16);
+            for (let i = 0; i < binsToAverage; i++) {
+              sum += dataArray[i];
+            }
+            const average = sum / binsToAverage;
+
+            // Push new volume to the end and shift array to make it scroll
+            setAudioVolumes((prev) => [...prev.slice(1), Math.max(average, 4)]);
+          }
+
+          animationFrameRef.current = requestAnimationFrame(updateWaveform);
+        };
+        animationFrameRef.current = requestAnimationFrame(updateWaveform);
+      }
 
       // Use webm/opus — best quality for Whisper transcription
       const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
@@ -79,6 +136,7 @@ const ChatInput = ({
       };
 
       mediaRecorder.onstop = () => {
+        cleanupAudioAnalyser();
         stream.getTracks().forEach((track) => track.stop());
         if (onRecordingStop) onRecordingStop();
       };
@@ -140,9 +198,7 @@ const ChatInput = ({
       className="p-2 pb-[max(1rem,env(safe-area-inset-bottom))] bg-white/40 backdrop-blur-xl relative border-t border-slate-200 shadow-inner"
     >
       <div
-        className={`flex items-center gap-3 bg-white rounded-full relative transition-all duration-500 ease-out ${
-          isListening ? "border border-slate-300" : "border border-slate-300"
-        }`}
+        className={`flex items-center gap-3 bg-white rounded-full relative transition-all duration-500 ease-out border border-slate-300`}
       >
         {/* Mic Button */}
         <button
@@ -160,13 +216,12 @@ const ChatInput = ({
                     ? "AI is thinking..."
                     : "Start voice input"
           }
-          className={`relative z-10 flex items-center justify-center w-8 h-8 rounded-full group shrink-0 ml-2 ${
-            isListening
+          className={`relative z-10 flex items-center justify-center w-8 h-8 rounded-full group shrink-0 ml-2 ${isListening
               ? "bg-red-500 text-white"
               : isProcessing || isTyping || isSessionEnd
                 ? "text-slate-200 cursor-not-allowed"
                 : "text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-          }`}
+            }`}
         >
           {isListening ? (
             <div className="w-3.5 h-3.5 bg-white rounded-sm" />
@@ -192,18 +247,21 @@ const ChatInput = ({
             </div>
           ) : isListening ? (
             <div className="flex items-center gap-1 w-full px-1 py-1">
-              <div className="flex items-center gap-[2px] flex-1 h-8 overflow-hidden">
-                {[...Array(48)].map((_, i) => (
-                  <div
-                    key={i}
-                    className="w-[3px] rounded-full shrink-0"
-                    style={{
-                      height: `${5 + Math.abs(Math.sin((i - waveOffset) * 0.8)) * 24}px`,
-                      backgroundColor: `rgba(15, 23, 42, ${0.2 + Math.abs(Math.sin((i - waveOffset) * 0.8)) * 0.8})`,
-                      transition: "height 50ms ease",
-                    }}
-                  />
-                ))}
+              {/* Waveform container with real-time responsive heights */}
+              <div className="flex items-center gap-[2.5px] flex-1 h-8 overflow-hidden justify-center px-2">
+                {audioVolumes.map((vol, i) => {
+                  // vol is from 0 to 255 (or 4). Scale to max 28px height, min 5px
+                  const height = 5 + (vol / 255) * 23;
+                  return (
+                    <div
+                      key={i}
+                      className="w-[3px] rounded-full bg-slate-400 shrink-0 transition-[height] duration-75"
+                      style={{
+                        height: `${height}px`,
+                      }}
+                    />
+                  );
+                })}
               </div>
 
               {/* X — cancel, no transcription */}
@@ -214,6 +272,7 @@ const ChatInput = ({
                     mediaRecorderRef.current.onstop = null;
                     mediaRecorderRef.current.stop();
                   }
+                  cleanupAudioAnalyser();
                   if (streamRef.current) {
                     streamRef.current.getTracks().forEach((t) => t.stop());
                   }

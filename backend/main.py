@@ -306,7 +306,15 @@ def login(request: Request, data: LoginRequest, db: Session = Depends(get_db)):
         db.refresh(user)
         
         # Initialize paper wallet
-        wallet = PaperWallet(user_id=user.id, balance=10000.0)
+        initial_cash = Decimal("100000.00")
+        wallet = PaperWallet(
+            user_id=user.id,
+            cash_balance=initial_cash,
+            initial_balance=initial_cash,
+            currency="USD",
+            unrealized_pnl=Decimal("0"),
+            total_equity=initial_cash
+        )
         db.add(wallet)
         db.commit()
         db.refresh(user)

@@ -32,6 +32,9 @@ services:
   # ─────────────────────────────────────────
   ai-backend:
     image: ritikajangra19/crypto-ai-backend:v1
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: crypto_ai_backend
     restart: unless-stopped
     env_file:

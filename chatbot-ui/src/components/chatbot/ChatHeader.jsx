@@ -1,9 +1,9 @@
 /* eslint-disable no-unused-vars */
 
-import { ChevronLeft, Maximize2, Minimize2, X } from 'lucide-react';
+import { ChevronLeft, Maximize2, Minimize2, X, Volume2, VolumeX } from 'lucide-react';
 import cryptobotAvatar from '../../assets/cryptobot_avatar_cute_1.png';
 
-const ChatHeader = ({ onClose, onOpenHistory, status = 'Online', showHistoryBtn = true, onMaximize, isMaximized }) => {
+const ChatHeader = ({ onClose, onOpenHistory, status = 'Online', showHistoryBtn = true, onMaximize, isMaximized, ttsEnabled, onToggleTts }) => {
     return (
         <div className="flex items-center justify-between p-3 px-3 sm:p-4 sm:px-4 border-b border-slate-700 bg-[#072042] backdrop-blur-md">
             <div className="flex items-center gap-3">
@@ -36,6 +36,16 @@ const ChatHeader = ({ onClose, onOpenHistory, status = 'Online', showHistoryBtn 
                 >
                     <X className="w-4 h-4" />
                 </button>
+
+                {onToggleTts && (
+                    <button
+                        onClick={onToggleTts}
+                        className="p-2 rounded-full hover:bg-white/10 transition text-white flex items-center justify-center"
+                        title={ttsEnabled ? 'Disable voice answers' : 'Enable voice answers'}
+                    >
+                        {ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
+                    </button>
+                )}
 
                 {onMaximize && (
                     <button

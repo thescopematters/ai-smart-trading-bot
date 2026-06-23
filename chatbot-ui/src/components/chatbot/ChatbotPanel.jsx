@@ -214,7 +214,43 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
     userPrefix,
     !showHistory,
   );
-  const { messages, reportActivity } = chatControls;
+  const { messages, reportActivity, isTyping } = chatControls;
+
+  // ── Text-to-Speech (TTS) ────────────────────────────────────────────────
+  const [ttsEnabled, setTtsEnabled] = useState(
+    () => localStorage.getItem("crypto_tts_enabled") === "true"
+  );
+
+  const handleToggleTts = () => {
+    const newVal = !ttsEnabled;
+    setTtsEnabled(newVal);
+    localStorage.setItem("crypto_tts_enabled", String(newVal));
+    if (!newVal) {
+      window.speechSynthesis.cancel();
+    } else {
+      toast({ type: "success", message: "Voice answers enabled!" });
+    }
+  };
+
+  const prevTypingRef = useRef(isTyping);
+  useEffect(() => {
+    // If typing just finished, and TTS is enabled, read the last bot message
+    if (prevTypingRef.current && !isTyping && ttsEnabled && !document.hidden) {
+      if (messages.length > 0) {
+        const lastMsg = messages[messages.length - 1];
+        if (!lastMsg.isUser && !lastMsg.isError) {
+          const cleanText = stripMarkdown(lastMsg.text);
+          if (cleanText) {
+            window.speechSynthesis.cancel(); // Stop any ongoing speech
+            const utterance = new SpeechSynthesisUtterance(cleanText);
+            utterance.rate = 1.05;
+            window.speechSynthesis.speak(utterance);
+          }
+        }
+      }
+    }
+    prevTypingRef.current = isTyping;
+  }, [isTyping, messages, ttsEnabled]);
 
   // ── Activity Tracking ───────────────────────────────────────────────────
   /**
@@ -503,8 +539,8 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
                                     );
                                   }}
                                   className={`p-1 rounded-full transition-all ${menuOpenId === session.id
-                                      ? "opacity-100 bg-slate-200 text-slate-600"
-                                      : "hover:bg-slate-200 text-slate-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
+                                    ? "opacity-100 bg-slate-200 text-slate-600"
+                                    : "hover:bg-slate-200 text-slate-400 opacity-100 sm:opacity-0 sm:group-hover:opacity-100"
                                     }`}
                                 >
                                   <MoreVertical size={14} />
@@ -554,6 +590,8 @@ const ChatbotPanel = ({ onClose, onMaximize, isMaximized }) => {
             onClose={onClose}
             onMaximize={onMaximize}
             isMaximized={isMaximized}
+            ttsEnabled={ttsEnabled}
+            onToggleTts={handleToggleTts}
           />
         )}
       </div>
@@ -579,6 +617,8 @@ const ActiveChat = ({
   onClose,
   onMaximize,
   isMaximized,
+  ttsEnabled,
+  onToggleTts,
 }) => {
   const {
     isConnected,
@@ -603,6 +643,8 @@ const ActiveChat = ({
         showHistoryBtn={showHistoryBtn}
         onMaximize={onMaximize}
         isMaximized={isMaximized}
+        ttsEnabled={ttsEnabled}
+        onToggleTts={onToggleTts}
       />
 
       {!isConnected ? (

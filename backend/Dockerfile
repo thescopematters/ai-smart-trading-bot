@@ -27,12 +27,12 @@ RUN git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git /build/whis
 COPY requirements.txt .
 
 # ── FIX 2: Pre-pin to /install so pip respects them when resolving requirements ──
-RUN pip install --no-cache-dir --prefix=/install \
+RUN pip install --no-cache-dir --default-timeout=1000 --prefix=/install \
     "pyarrow==14.0.2" \
     "onnxruntime==1.17.3"
 
 # Install everything into /install prefix
-RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
+RUN pip install --no-cache-dir --default-timeout=1000 --prefix=/install -r requirements.txt
 
 # ── Surgical cleanup ──
 # ── FIX 1: Correct find syntax for .pyc/.pyo ──
