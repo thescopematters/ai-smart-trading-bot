@@ -1,0 +1,68 @@
+# ============================================================
+# CLIENT HARNESS CONFIG
+# One copy of this file per client deployment.
+# Only this file changes between clients — no code changes.
+# ============================================================
+
+client:
+  name: "default"
+  # MySQL connection string for this client's database.
+  # Format: mysql+pymysql://user:password@host:3306/dbname
+  database_url: ""
+
+# External API credentials for this client.
+api_keys:
+  coinmarketcap: ""          # Required for get_live_price, get_market_analysis
+  cryptopanic: ""            # Required for get_trending_news
+  coinmarketcap_url: ""      # Full endpoint URL (e.g. https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest)
+  cryptopanic_url: ""        # Full endpoint URL (e.g. https://cryptopanic.com/api/v1/posts/)
+  blockchair_url: "https://api.blockchair.com"  # Required for get_blockchain_stats
+
+# Per-call limits loaded at startup.
+limits:
+  rate_limit_per_minute: 30  # Max tool calls per tool per minute (sliding window)
+  trade_history_default: 20  # Default rows returned by get_trade_history
+
+# Risk engine limits — loaded into risk_engine at startup.
+risk:
+  max_order_usd: 10000          # Maximum single order size in USD
+  max_daily_loss_usd: 500       # Daily P&L loss cap
+  max_portfolio_exposure: 0.30  # Max fraction of portfolio in one position
+
+# ============================================================
+# TOOL HARNESS
+# List only the tools this client is allowed to call.
+# Any tool NOT listed here is never registered — the AI
+# cannot call it, regardless of what the model reasons.
+#
+# Categories:
+#   data    — read-only market data (no user account needed)
+#   account — read-only portfolio/balance queries (user_id required)
+#   action  — trade execution (user_id + session_id required)
+#
+# For a read-only market data client: keep only data tools.
+# For a conservative client: include account but exclude action tools.
+# For a full-feature client: include all three categories.
+# ============================================================
+
+tools_enabled:
+  # -- data tools --
+  - get_live_price
+  - get_trending_news
+  - get_blockchain_stats
+  - get_market_analysis
+  - query_knowledge_base
+
+  # -- account tools --
+  - get_balance
+  - get_quote
+  - get_holdings
+  - get_trade_history
+
+  # -- action tools (disable for read-only or conservative clients) --
+  - place_order
+  - initiate_trade_workflow
+  - provide_order_type
+  - provide_limit_price
+  - confirm_trade_execution
+  - get_live_order_status
