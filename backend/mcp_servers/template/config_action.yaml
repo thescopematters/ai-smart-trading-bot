@@ -1,0 +1,29 @@
+# ACTION TOOLS HARNESS — execution_agent
+# 5 trade execution tools. Require user_id + session_id.
+
+client:
+  name: "default-action"
+  database_url: ""
+
+api_keys:
+  coinmarketcap: ""
+  cryptopanic: ""
+  coinmarketcap_url: ""
+  cryptopanic_url: ""
+  blockchair_url: "https://api.blockchair.com"
+
+limits:
+  rate_limit_per_minute: 30
+  trade_history_default: 20
+
+risk:
+  max_order_usd: 10000
+  max_daily_loss_usd: 500
+  max_portfolio_exposure: 0.30
+
+tools_enabled:
+  - initiate_trade_workflow
+  - provide_order_type
+  - provide_limit_price
+  - confirm_trade_execution
+  - get_live_order_status

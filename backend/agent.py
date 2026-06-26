@@ -48,16 +48,19 @@ GEMINI_MODEL = "gemini-flash-latest"
 # MCP Connection Configuration
 # -------------------------------------------------------------------------
 MCP_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "mcp_servers")
-MCP_SERVER_PATH = os.path.join(MCP_DIR, "mcp_server.py")
-MCP_TRADING_SERVER_PATH = os.path.join(MCP_DIR, "mcp_trading_server.py")
-MCP_EXECUTION_SERVER_PATH = os.path.join(MCP_DIR, "mcp_execution_server.py")
+TEMPLATE_DIR = os.path.join(MCP_DIR, "template")
+TEMPLATE_SERVER = os.path.join(TEMPLATE_DIR, "base_mcp_server.py")
+TEMPLATE_DATA_CONFIG = os.path.join(TEMPLATE_DIR, "config_data.yaml")
+TEMPLATE_ACCOUNT_CONFIG = os.path.join(TEMPLATE_DIR, "config_account.yaml")
+TEMPLATE_ACTION_CONFIG = os.path.join(TEMPLATE_DIR, "config_action.yaml")
 
 # Python executable — same one running this process
 PYTHON_EXE = sys.executable
 
-logger.info(f"MCP Server Path: {MCP_SERVER_PATH}")
-logger.info(f"MCP Trading Server Path: {MCP_TRADING_SERVER_PATH}")
-logger.info(f"MCP Execution Server Path: {MCP_EXECUTION_SERVER_PATH}")
+logger.info(f"Template Server: {TEMPLATE_SERVER}")
+logger.info(f"Data Config: {TEMPLATE_DATA_CONFIG}")
+logger.info(f"Account Config: {TEMPLATE_ACCOUNT_CONFIG}")
+logger.info(f"Action Config: {TEMPLATE_ACTION_CONFIG}")
 logger.info(f"Python Executable: {PYTHON_EXE}")
 
 # Create the MCP Toolsets — inherit full parent environment for Docker networking
@@ -65,7 +68,7 @@ mcp_toolset = MCPToolset(
     connection_params=StdioConnectionParams(
         server_params=StdioServerParameters(
             command=PYTHON_EXE,
-            args=[MCP_SERVER_PATH],
+            args=[TEMPLATE_SERVER, "--config", TEMPLATE_DATA_CONFIG],
             env=dict(os.environ),
         ),
         timeout=30.0,
@@ -76,7 +79,7 @@ trading_toolset = MCPToolset(
     connection_params=StdioConnectionParams(
         server_params=StdioServerParameters(
             command=PYTHON_EXE,
-            args=[MCP_TRADING_SERVER_PATH],
+            args=[TEMPLATE_SERVER, "--config", TEMPLATE_ACCOUNT_CONFIG],
             env=dict(os.environ),
         ),
         timeout=30.0,
@@ -87,7 +90,7 @@ execution_toolset = MCPToolset(
     connection_params=StdioConnectionParams(
         server_params=StdioServerParameters(
             command=PYTHON_EXE,
-            args=[MCP_EXECUTION_SERVER_PATH],
+            args=[TEMPLATE_SERVER, "--config", TEMPLATE_ACTION_CONFIG],
             env=dict(os.environ),
         ),
         timeout=30.0,

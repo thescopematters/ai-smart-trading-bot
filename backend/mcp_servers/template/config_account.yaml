@@ -1,0 +1,29 @@
+# ACCOUNT TOOLS HARNESS — portfolio_agent
+# 5 read-only account tools. All require user_id.
+
+client:
+  name: "default-account"
+  database_url: ""
+
+api_keys:
+  coinmarketcap: ""
+  cryptopanic: ""
+  coinmarketcap_url: ""
+  cryptopanic_url: ""
+  blockchair_url: "https://api.blockchair.com"
+
+limits:
+  rate_limit_per_minute: 30
+  trade_history_default: 20
+
+risk:
+  max_order_usd: 10000
+  max_daily_loss_usd: 500
+  max_portfolio_exposure: 0.30
+
+tools_enabled:
+  - get_balance
+  - get_quote
+  - get_holdings
+  - get_trade_history
+  - place_order
